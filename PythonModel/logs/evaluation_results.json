@@ -1,0 +1,18 @@
+{
+  "timestamp": "2025-08-04T12:53:00.399945",
+  "test_accuracy": 0.5416666666666666,
+  "test_f1_score": 0.5586419753086421,
+  "classification_report": "              precision    recall  f1-score   support\n\n     No Fall       0.80      0.47      0.59        17\n        Fall       0.36      0.71      0.48         7\n\n    accuracy                           0.54        24\n   macro avg       0.58      0.59      0.53        24\nweighted avg       0.67      0.54      0.56        24\n",
+  "confusion_matrix": [
+    [
+      8,
+      9
+    ],
+    [
+      2,
+      5
+    ]
+  ],
+  "target_accuracy": 0.85,
+  "target_f1_score": 0.85,
+  "model_meets_targets": 

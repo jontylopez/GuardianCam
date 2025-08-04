@@ -1,0 +1,51 @@
+# Node.js Dependencies
+node_modules/
+
+# Python Virtual Environments
+venv/
+__pycache__/
+*.pyc
+
+# React/Flutter Build Artifacts
+build/
+dist/
+android/build/
+ios/Pods/
+.flutter-plugins
+
+# Logs
+*.log
+
+# IDE Files
+.vscode/
+.idea/
+
+# OS Files
+.DS_Store
+Thumbs.db
+
+# Environment Files
+.env
+.env.local
+
+# Git backup files
+*.orig
+
+# Byte-compiled / optimized / DLL files
+*.pyd
+*.pyo
+*.so
+
+# Test Reports
+coverage/
+
+# Lint Cache
+.eslintcache
+
+# Git Large File Storage (optional)
+*.h5
+*.pb
+*.tflite
+
+
+**/fall_dataset/
