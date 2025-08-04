@@ -31,7 +31,7 @@ export const AuthProvider = ({ children }) => {
     const checkAuth = async () => {
       if (token) {
         try {
-          const response = await axios.get("/api/auth/profile");
+          const response = await axios.get("/api/users/profile");
           setUser(response.data.user);
         } catch (error) {
           console.error("Auth check failed:", error);

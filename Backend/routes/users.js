@@ -23,6 +23,13 @@ router.get("/profile", async (req, res) => {
     const userData = userDoc.data();
     delete userData.password; // Don't send password
 
+    // Ensure firstName and lastName are present (for backward compatibility)
+    if (!userData.firstName && userData.name) {
+      const nameParts = userData.name.split(' ');
+      userData.firstName = nameParts[0] || '';
+      userData.lastName = nameParts.slice(1).join(' ') || '';
+    }
+
     res.json({
       user: {
         id: userId,
@@ -42,7 +49,8 @@ router.get("/profile", async (req, res) => {
 router.put(
   "/profile",
   [
-    body("name").optional().notEmpty().trim(),
+    body("firstName").optional().notEmpty().trim(),
+    body("lastName").optional().notEmpty().trim(),
     body("phone").optional().isMobilePhone(),
     body("email").optional().isEmail().normalizeEmail(),
   ],
@@ -56,7 +64,7 @@ router.put(
         });
       }
 
-      const { name, phone, email } = req.body;
+      const { firstName, lastName, phone, email } = req.body;
       const userId = req.user.uid;
       const db = getFirestore();
 
@@ -80,14 +88,33 @@ router.put(
         updatedAt: new Date(),
       };
 
-      if (name) updateData.name = name;
+      if (firstName) updateData.firstName = firstName;
+      if (lastName) updateData.lastName = lastName;
       if (phone) updateData.phone = phone;
       if (email) updateData.email = email;
 
+      // Update the combined name field for backward compatibility
+      if (firstName || lastName) {
+        const userDoc = await db.collection("users").doc(userId).get();
+        const currentData = userDoc.data();
+        const newFirstName = firstName || currentData.firstName || '';
+        const newLastName = lastName || currentData.lastName || '';
+        updateData.name = `${newFirstName} ${newLastName}`.trim();
+      }
+
       await db.collection("users").doc(userId).update(updateData);
+
+      // Get updated user data
+      const updatedDoc = await db.collection("users").doc(userId).get();
+      const updatedUserData = updatedDoc.data();
+      delete updatedUserData.password;
 
       res.json({
         message: "Profile updated successfully",
+        user: {
+          id: userId,
+          ...updatedUserData,
+        },
       });
     } catch (error) {
       console.error("Update profile error:", error);

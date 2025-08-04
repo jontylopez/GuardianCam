@@ -1,0 +1,250 @@
+.live-fall-detection {
+  background: white;
+  border-radius: 16px;
+  padding: 32px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+  max-width: 600px;
+  width: 100%;
+}
+
+.detection-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 24px;
+  padding-bottom: 16px;
+  border-bottom: 2px solid #f0f0f0;
+}
+
+.detection-header h3 {
+  margin: 0;
+  color: #333;
+  font-size: 1.8rem;
+  font-weight: 600;
+}
+
+.connection-status {
+  display: flex;
+  align-items: center;
+}
+
+.status-indicator {
+  padding: 8px 16px;
+  border-radius: 20px;
+  font-size: 0.9rem;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.status-indicator.connected {
+  background: #d4edda;
+  color: #155724;
+  border: 1px solid #c3e6cb;
+}
+
+.status-indicator.disconnected {
+  background: #f8d7da;
+  color: #721c24;
+  border: 1px solid #f5c6cb;
+}
+
+.detection-controls {
+  margin-bottom: 24px;
+  display: flex;
+  justify-content: center;
+}
+
+.detection-controls .btn {
+  padding: 16px 32px;
+  border: none;
+  border-radius: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  font-size: 1.1rem;
+  min-width: 160px;
+}
+
+.detection-controls .btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.detection-controls .btn-primary {
+  background: #007bff;
+  color: white;
+}
+
+.detection-controls .btn-primary:hover:not(:disabled) {
+  background: #0056b3;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 123, 255, 0.3);
+}
+
+.detection-controls .btn-danger {
+  background: #dc3545;
+  color: white;
+}
+
+.detection-controls .btn-danger:hover {
+  background: #c82333;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(220, 53, 69, 0.3);
+}
+
+.detection-controls .btn-secondary {
+  background: #6c757d;
+  color: white;
+}
+
+.detection-controls .btn-secondary:hover {
+  background: #545b62;
+  transform: translateY(-2px);
+}
+
+.detection-status {
+  background: #f8f9fa;
+  border: 3px solid;
+  border-radius: 16px;
+  padding: 24px;
+  margin-bottom: 24px;
+  transition: all 0.3s ease;
+}
+
+.detection-status:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+}
+
+.status-display h4 {
+  margin: 0 0 20px 0;
+  font-size: 1.5rem;
+  font-weight: 600;
+  text-align: center;
+}
+
+.status-display p {
+  margin: 12px 0;
+  font-size: 1.1rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.confidence-value,
+.fall-count-value {
+  font-weight: 700;
+  font-size: 1.2rem;
+  padding: 6px 12px;
+  border-radius: 8px;
+  background: #e9ecef;
+}
+
+.confidence-value {
+  color: #007bff;
+}
+
+.fall-count-value {
+  color: #dc3545;
+}
+
+.last-update {
+  font-size: 0.9rem !important;
+  color: #6c757d;
+  font-style: italic;
+  text-align: center !important;
+  justify-content: center !important;
+}
+
+.detection-info {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+  margin-top: 24px;
+}
+
+.info-card {
+  background: #f8f9fa;
+  border-radius: 12px;
+  padding: 20px;
+  border-left: 4px solid #007bff;
+}
+
+.info-card h5 {
+  margin: 0 0 16px 0;
+  color: #333;
+  font-size: 1.2rem;
+  font-weight: 600;
+}
+
+.info-card ul,
+.info-card ol {
+  margin: 0;
+  padding-left: 20px;
+}
+
+.info-card li {
+  margin: 8px 0;
+  color: #555;
+  line-height: 1.5;
+}
+
+.connection-warning {
+  background: #fff3cd;
+  border: 1px solid #ffeaa7;
+  border-radius: 12px;
+  padding: 20px;
+  margin-top: 24px;
+  text-align: center;
+}
+
+.connection-warning p {
+  margin: 0 0 16px 0;
+  color: #856404;
+  font-weight: 500;
+}
+
+/* Responsive design */
+@media (max-width: 768px) {
+  .live-fall-detection {
+    padding: 24px;
+    margin: 0 16px;
+  }
+  
+  .detection-header {
+    flex-direction: column;
+    gap: 12px;
+    align-items: flex-start;
+  }
+  
+  .detection-info {
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+  
+  .detection-controls .btn {
+    width: 100%;
+    min-width: auto;
+  }
+}
+
+/* Animation for fall detection */
+@keyframes fallAlert {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.05); }
+  100% { transform: scale(1); }
+}
+
+.detection-status[style*="border-color: #dc3545"] {
+  animation: fallAlert 0.5s ease-in-out;
+}
+
+/* Toast customization for fall alerts */
+.Toastify__toast--error {
+  background: #dc3545 !important;
+  color: white !important;
+  font-weight: bold !important;
+  font-size: 16px !important;
+} 

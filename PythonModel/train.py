@@ -244,9 +244,9 @@ class FallDetectionTrainer:
             'test_f1_score': float(f1_score),
             'classification_report': classification_report,
             'confusion_matrix': confusion_matrix.tolist(),
-            'target_accuracy': self.config.TARGET_ACCURACY,
-            'target_f1_score': self.config.TARGET_F1_SCORE,
-            'model_meets_targets': accuracy >= self.config.TARGET_ACCURACY and f1_score >= self.config.TARGET_F1_SCORE
+            'target_accuracy': float(self.config.TARGET_ACCURACY),
+            'target_f1_score': float(self.config.TARGET_F1_SCORE),
+            'model_meets_targets': bool(accuracy >= self.config.TARGET_ACCURACY and f1_score >= self.config.TARGET_F1_SCORE)
         }
         
         with open(os.path.join(self.config.LOG_DIR, 'evaluation_results.json'), 'w') as f:

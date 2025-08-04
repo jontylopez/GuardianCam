@@ -12,7 +12,8 @@ router.post(
   [
     body("email").isEmail().normalizeEmail(),
     body("password").isLength({ min: 6 }),
-    body("name").notEmpty().trim(),
+    body("firstName").notEmpty().trim(),
+    body("lastName").notEmpty().trim(),
     body("phone").optional().isMobilePhone(),
   ],
   async (req, res) => {
@@ -26,7 +27,7 @@ router.post(
         });
       }
 
-      const { email, password, name, phone, role = "user" } = req.body;
+      const { email, password, firstName, lastName, phone, role = "user" } = req.body;
       const db = getFirestore();
 
       // Check if user already exists
@@ -48,7 +49,9 @@ router.post(
       const userData = {
         email,
         password: hashedPassword,
-        name,
+        firstName,
+        lastName,
+        name: `${firstName} ${lastName}`, // Keep for backward compatibility
         phone,
         role,
         createdAt: new Date(),
@@ -70,7 +73,9 @@ router.post(
           uid: userId,
           email,
           role,
-          name,
+          firstName,
+          lastName,
+          name: `${firstName} ${lastName}`,
         },
         process.env.JWT_SECRET,
         { expiresIn: process.env.JWT_EXPIRES_IN || "24h" }
@@ -158,6 +163,8 @@ router.post(
           uid: userDoc.id,
           email: userData.email,
           role: userData.role,
+          firstName: userData.firstName || userData.name?.split(' ')[0] || '',
+          lastName: userData.lastName || userData.name?.split(' ').slice(1).join(' ') || '',
           name: userData.name,
         },
         process.env.JWT_SECRET,
@@ -210,6 +217,13 @@ router.get("/profile", async (req, res) => {
 
     const userData = userDoc.data();
     delete userData.password;
+
+    // Ensure firstName and lastName are present (for backward compatibility)
+    if (!userData.firstName && userData.name) {
+      const nameParts = userData.name.split(' ');
+      userData.firstName = nameParts[0] || '';
+      userData.lastName = nameParts.slice(1).join(' ') || '';
+    }
 
     res.json({
       user: {

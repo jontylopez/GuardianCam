@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useAuth } from "../../contexts/AuthContext";
 import Navbar from "../layout/Navbar";
 import {
@@ -16,12 +16,28 @@ const Profile = () => {
   const [isEditing, setIsEditing] = useState(false);
   const [loading, setLoading] = useState(false);
   const [formData, setFormData] = useState({
-    firstName: user?.firstName || "",
-    lastName: user?.lastName || "",
+    firstName: user?.firstName || user?.name?.split(' ')[0] || "",
+    lastName: user?.lastName || user?.name?.split(' ').slice(1).join(' ') || "",
     email: user?.email || "",
     phone: user?.phone || "",
   });
   const [errors, setErrors] = useState({});
+
+  // Debug logging
+  console.log("Profile component - user data:", user);
+  console.log("Profile component - formData:", formData);
+
+  // Update formData when user data changes
+  useEffect(() => {
+    if (user) {
+      setFormData({
+        firstName: user.firstName || user.name?.split(' ')[0] || "",
+        lastName: user.lastName || user.name?.split(' ').slice(1).join(' ') || "",
+        email: user.email || "",
+        phone: user.phone || "",
+      });
+    }
+  }, [user]);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
