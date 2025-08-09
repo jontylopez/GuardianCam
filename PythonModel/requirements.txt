@@ -1,5 +1,7 @@
-tensorflow==2.13.0
-opencv-python==4.8.0.76
+tensorflow-macos==2.15.0
+tensorflow-metal==1.1.0
+opencv-python==4.8.1.78
+mediapipe==0.10.21
 numpy==1.24.3
 matplotlib==3.7.2
 scikit-learn==1.3.0
@@ -9,4 +11,4 @@ tqdm==4.65.0
 pillow==10.0.0
 pandas==2.0.3
 seaborn==0.12.2
-tensorboard==2.13.0 
+tensorboard==2.15.0 

@@ -76,13 +76,13 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
     }
 
     try {
-      token = (await Notifications.getExpoPushTokenAsync({
-        projectId: 'your-expo-project-id', // You'll need to set this
-      })).data;
-      console.log('Expo push token:', token);
-      setExpoPushToken(token);
+      // For development, we'll skip push token registration
+      // In production, you would need a real Expo project ID
+      console.log('Skipping push token registration in development mode');
+      setExpoPushToken('dev-token');
     } catch (error) {
       console.error('Error getting push token:', error);
+      console.log('Push token error is expected in development mode');
     }
   };
 
@@ -94,7 +94,7 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
         timestamp: new Date().toISOString(),
       });
 
-      // Show local notification
+      // Show local notification (works in development)
       await Notifications.scheduleNotificationAsync({
         content: {
           title: '🚨 Fall Detected!',
@@ -114,6 +114,14 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
       );
     } catch (error) {
       console.error('Error sending fall notification:', error);
+      // Fallback: just show alert if notification fails
+      Alert.alert(
+        '🚨 Fall Detected!',
+        'A fall has been detected. Please check the camera feed immediately.',
+        [
+          { text: 'OK', onPress: () => console.log('Fall alert acknowledged') }
+        ]
+      );
     }
   };
 

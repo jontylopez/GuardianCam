@@ -50,17 +50,26 @@ def check_gpu():
     print("\n🔍 Checking GPU availability...")
     try:
         import tensorflow as tf
-        gpus = tf.config.list_physical_devices('GPU')
-        if gpus:
-            print(f"✅ GPU found: {len(gpus)} device(s)")
-            for gpu in gpus:
-                print(f"   - {gpu.name}")
-            return True
+        # Check if we can access the config module
+        if hasattr(tf, 'config'):
+            gpus = tf.config.list_physical_devices('GPU')
+            if gpus:
+                print(f"✅ GPU found: {len(gpus)} device(s)")
+                for gpu in gpus:
+                    print(f"   - {gpu.name}")
+                return True
+            else:
+                print("⚠️ No GPU found. Training will be slower on CPU.")
+                return False
         else:
-            print("⚠️ No GPU found. Training will be slower on CPU.")
+            print("⚠️ TensorFlow config not available. GPU check skipped.")
             return False
     except ImportError:
         print("⚠️ TensorFlow not installed yet. GPU check will be done after installation.")
+        return False
+    except Exception as e:
+        print(f"⚠️ Error checking GPU: {e}")
+        print("⚠️ Training will proceed on CPU.")
         return False
 
 def test_imports():

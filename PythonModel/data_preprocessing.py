@@ -6,7 +6,7 @@ import os
 import cv2
 import numpy as np
 import tensorflow as tf
-from tensorflow.keras.preprocessing.image import ImageDataGenerator
+from keras.preprocessing.image import ImageDataGenerator
 from sklearn.model_selection import train_test_split
 import albumentations as A
 from tqdm import tqdm

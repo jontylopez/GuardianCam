@@ -13,14 +13,14 @@ import json
 from flask import Flask, request, jsonify, render_template_string
 from flask_cors import CORS
 from video_frame_processor import VideoFrameProcessor
-from human_detection import HumanDetector
+from mediapipe_human_detection import MediaPipeHumanDetector
 
 app = Flask(__name__)
 CORS(app)
 
 # Global detection instances
 fall_detector = VideoFrameProcessor()
-human_detector = HumanDetector()
+human_detector = MediaPipeHumanDetector()
 
 @app.route('/')
 def index():
@@ -233,25 +233,27 @@ def get_human_status():
                 'human_count': 0,
                 'moving_human_count': 0,
                 'stationary_human_count': 0,
-                'is_running': False
+                'is_running': False,
+                'detector_type': 'MediaPipe'
             })
         
         # Process current frame for human detection
         if fall_detector.cap and fall_detector.cap.isOpened():
             ret, frame = fall_detector.cap.read()
             if ret:
-                # Use the improved human detection
+                # Use MediaPipe human detection
                 is_human, confidence, is_moving, movement_intensity = human_detector.process_frame(frame)
                 status = human_detector.get_status()
                 return jsonify({
                     'is_human_present': is_human,
                     'is_moving': is_moving,
                     'confidence': confidence,
-                    'motion_intensity': movement_intensity,  # Updated to use movement_intensity
+                    'motion_intensity': movement_intensity,
                     'human_count': status['human_count'],
                     'moving_human_count': status['moving_human_count'],
                     'stationary_human_count': status['stationary_human_count'],
-                    'is_running': fall_detector.is_running
+                    'is_running': fall_detector.is_running,
+                    'detector_type': 'MediaPipe'
                 })
         
         return jsonify({
@@ -262,7 +264,8 @@ def get_human_status():
             'human_count': 0,
             'moving_human_count': 0,
             'stationary_human_count': 0,
-            'is_running': fall_detector.is_running
+            'is_running': fall_detector.is_running,
+            'detector_type': 'MediaPipe'
         })
     except Exception as e:
         return jsonify({'error': str(e)})
@@ -275,7 +278,7 @@ def health():
         'model_loaded': fall_detector.model is not None,
         'camera_active': fall_detector.cap is not None and fall_detector.cap.isOpened(),
         'processor_type': 'VideoFrameProcessor',
-        'human_detection': 'available'
+        'human_detection': 'MediaPipe'
     })
 
 if __name__ == '__main__':
