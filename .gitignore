@@ -211,3 +211,22 @@ yarn-error.log
 
 # Local Netlify folder
 .netlify
+# Logs
+logs/
+*.log
+
+# Node
+node_modules/
+
+# Builds
+**/build/
+**/dist/
+
+# Env
+.env
+Backend/firebase-key.json
+Frontend-mobile/google-services.json
+Frontend-mobile/fcm-service-account.json
+
+# OS
+.DS_Store
