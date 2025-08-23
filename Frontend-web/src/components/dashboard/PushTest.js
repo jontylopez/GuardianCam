@@ -16,8 +16,8 @@ const PushTest = () => {
 
     try {
       setSending(true);
-      // Call backend proxy to avoid CORS issues
-      const res = await fetch('http://localhost:5000/api/push/send', {
+      // Call backend via CRA proxy to avoid CORS issues
+      const res = await fetch('/api/push/send', {
         method: 'POST',
         headers: {
           'Accept': 'application/json',

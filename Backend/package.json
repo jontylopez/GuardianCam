@@ -5,7 +5,7 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "dev": "nodemon server.js",
+    "dev": "ip=$(node ../scripts/detect-ip.js) LAN_IP=$ip ALLOW_ANY_ORIGIN=true ALLOWED_ORIGINS=http://$ip:3000 nodemon server.js",
     "test": "jest",
     "test-setup": "node test-setup.js"
   },

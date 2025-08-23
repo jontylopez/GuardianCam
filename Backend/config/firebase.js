@@ -19,6 +19,10 @@ const initializeFirebase = () => {
     });
 
     db = admin.firestore();
+    // Avoid Firestore errors when optional fields are undefined
+    try {
+      db.settings({ ignoreUndefinedProperties: true });
+    } catch (_) {}
     console.log("✅ Firebase initialized successfully");
 
     return db;

@@ -43,6 +43,7 @@ function App() {
                 </ProtectedRoute>
               }
             />
+            <Route path="/webrtc/view-guest" element={<Viewer />} />
             <Route
               path="/webrtc/broadcast"
               element={

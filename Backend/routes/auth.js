@@ -52,7 +52,6 @@ router.post(
         firstName,
         lastName,
         name: `${firstName} ${lastName}`, // Keep for backward compatibility
-        phone,
         role,
         createdAt: new Date(),
         updatedAt: new Date(),
@@ -63,6 +62,10 @@ router.post(
           alertRadius: 1000, // meters
         },
       };
+      // Only include optional fields if provided
+      if (phone !== undefined && phone !== null && phone !== "") {
+        userData.phone = phone;
+      }
 
       const docRef = await userRef.add(userData);
       const userId = docRef.id;

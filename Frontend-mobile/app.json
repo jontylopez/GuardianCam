@@ -28,7 +28,7 @@
 
     "plugins": [
       ["expo-notifications", { "icon": "./assets/notification-icon.png", "color": "#ffffff" }],
-      ["expo-build-properties", { "ios": { "newArchEnabled": true }, "android": { "newArchEnabled": true } }]
+      ["expo-build-properties", { "ios": { "newArchEnabled": true }, "android": { "newArchEnabled": false } }]
     ],
 
     "extra": { "eas": { "projectId": "2679af21-a09e-4070-a94d-b76860439655" } },

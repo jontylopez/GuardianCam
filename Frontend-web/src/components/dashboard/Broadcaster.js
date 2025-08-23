@@ -55,9 +55,15 @@ const Broadcaster = () => {
         });
 
         socket.on('webrtc-answer', async ({ sdp }) => {
-          setStatus('setting answer');
-          await pc.setRemoteDescription(new RTCSessionDescription(sdp));
-          setStatus('streaming');
+          try {
+            // Only apply the answer if we have a local offer pending
+            if (pc.signalingState !== 'have-local-offer') {
+              return;
+            }
+            setStatus('setting answer');
+            await pc.setRemoteDescription(new RTCSessionDescription(sdp));
+            setStatus('streaming');
+          } catch (e) {}
         });
 
         socket.on('webrtc-ice-candidate', async ({ candidate }) => {

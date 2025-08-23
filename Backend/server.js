@@ -7,6 +7,7 @@ const rateLimit = require("express-rate-limit");
 const { createServer } = require("http");
 const { Server } = require("socket.io");
 require("dotenv").config();
+const os = require("os");
 
 // Import routes
 const authRoutes = require("./routes/auth");
@@ -26,6 +27,8 @@ const { initializeFirebase } = require("./config/firebase");
 
 const app = express();
 const server = createServer(app);
+// Trust reverse proxies (e.g., CRA dev server) so rate limiter and logs use correct client IP
+app.set('trust proxy', 1);
 const io = new Server(server, {
   cors: {
     origin: allowAnyOrigin ? true : allowedOrigins,
@@ -41,6 +44,10 @@ const limiter = rateLimit({
   windowMs: parseInt(process.env.RATE_LIMIT_WINDOW_MS) || 15 * 60 * 1000, // 15 minutes
   max: parseInt(process.env.RATE_LIMIT_MAX_REQUESTS) || 100, // limit each IP to 100 requests per windowMs
   message: "Too many requests from this IP, please try again later.",
+  standardHeaders: true,
+  legacyHeaders: false,
+  // Do not rate-limit Socket.IO polling/WebSocket upgrade endpoints
+  skip: (req) => req?.path?.startsWith('/socket.io'),
 });
 
 // Middleware
@@ -113,7 +120,8 @@ io.on("connection", (socket) => {
 
   socket.on("viewer-ready", ({ room }) => {
     if (!room) return;
-    socket.to(room).emit("viewer-ready");
+    // Forward the viewer's socket id so broadcaster can target offers
+    socket.to(room).emit("viewer-ready", { from: socket.id });
   });
 
   socket.on("webrtc-offer", ({ room, sdp, toSocketId }) => {
@@ -186,10 +194,26 @@ app.use("*", (req, res) => {
 
 const PORT = process.env.PORT || 5000;
 
+function getLanIPv4() {
+  const interfaces = os.networkInterfaces();
+  for (const name of Object.keys(interfaces)) {
+    for (const net of interfaces[name] || []) {
+      if (!net || net.internal) continue;
+      if (net.family === "IPv4") {
+        if (/^docker|^vboxnet|^utun|^lo/.test(name)) continue;
+        return net.address;
+      }
+    }
+  }
+  return null;
+}
+
 server.listen(PORT, () => {
   console.log(`🚀 GuardianCam Backend running on port ${PORT}`);
   console.log(`📊 Environment: ${process.env.NODE_ENV || "development"}`);
-  console.log(`🔗 Health check: http://localhost:${PORT}/health`);
+  const lanIp = process.env.LAN_IP || getLanIPv4() || "localhost";
+  console.log(`🔗 Health check (local): http://localhost:${PORT}/health`);
+  console.log(`🔗 Health check (LAN):   http://${lanIp}:${PORT}/health`);
 });
 
 module.exports = { app, io };

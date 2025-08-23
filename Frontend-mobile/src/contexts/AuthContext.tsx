@@ -1,8 +1,8 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import axios from 'axios';
-import { Alert } from 'react-native';
-import { NativeModules } from 'react-native';
+import { Alert, Platform, NativeModules } from 'react-native';
+import Constants from 'expo-constants';
 
 interface User {
   id: string;
@@ -35,33 +35,52 @@ export const useAuth = () => {
 };
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  // API base URL resolution: prefer explicit env; else derive from live dashboard URL host; else localhost
+  // API base URL resolution: prefer explicit env; else derive from Expo/Metro hints; else platform fallbacks
   // @ts-ignore
   const API_BASE_URL: string = (() => {
+    // 1) Explicit env
     // @ts-ignore
     const explicit: string | undefined = process.env.EXPO_PUBLIC_API_BASE_URL;
-    if (explicit) return explicit;
-    try {
+    if (explicit && explicit.trim()) return explicit.trim();
+
+    // 2) Gather host candidates from Expo/Metro
+    const candidates: Array<string | undefined> = [
+      (Constants as any)?.expoConfig?.hostUri,
+      (Constants as any)?.expoConfig?.developer?.hostUri,
+      (Constants as any)?.manifest?.debuggerHost,
+      (NativeModules as any)?.SourceCode?.scriptURL,
       // @ts-ignore
-      const live: string | undefined = process.env.EXPO_PUBLIC_LIVE_DASHBOARD_URL;
-      if (live) {
-        const u = new URL(live);
-        return `${u.protocol}//${u.hostname}:5000`;
-      }
-    } catch {}
-    // Dev fallback: derive host from Metro bundle URL
-    try {
-      const scriptURL: string | undefined = (NativeModules as any)?.SourceCode?.scriptURL;
-      if (scriptURL) {
-        const u = new URL(scriptURL);
-        return `${u.protocol}//${u.hostname}:5000`;
-      }
-    } catch {}
-    return 'http://localhost:5000';
+      process.env.EXPO_PUBLIC_LIVE_DASHBOARD_URL,
+    ];
+
+    for (const cand of candidates) {
+      if (!cand || typeof cand !== 'string') continue;
+      try {
+        // Ensure URL has a protocol for parsing
+        const withProto = cand.includes('://') ? cand : `http://${cand}`;
+        const parsed = new URL(withProto);
+        const host = parsed.hostname;
+        const proto = parsed.protocol || 'http:';
+        if (host && host.trim()) {
+          return `${proto}//${host}:5000`;
+        }
+      } catch {}
+    }
+
+    // 3) Platform-specific last resorts
+    if (Platform.OS === 'android') return 'http://10.0.2.2:5000';
+    return 'http://127.0.0.1:5000';
   })();
   const [user, setUser] = useState<User | null>(null);
   const [token, setToken] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+
+  // Debug: log resolved API base once
+  useEffect(() => {
+    try {
+      console.log('[Auth] API_BASE_URL ->', API_BASE_URL);
+    } catch {}
+  }, []);
 
   // Set up axios defaults
   useEffect(() => {
@@ -87,11 +106,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           // Verify token is still valid
           try {
             await axios.get(`${API_BASE_URL}/api/users/profile`);
-          } catch (error) {
-            // Token is invalid, clear storage
-            await AsyncStorage.multiRemove(['token', 'user']);
-            setToken(null);
-            setUser(null);
+          } catch (error: any) {
+            const status = error?.response?.status;
+            if (status === 401 || status === 403) {
+              // Only clear on auth errors
+              await AsyncStorage.multiRemove(['token', 'user']);
+              setToken(null);
+              setUser(null);
+            }
           }
         }
       } catch (error) {
@@ -123,7 +145,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       Alert.alert('Success', 'Login successful!');
       return true;
     } catch (error: any) {
-      const message = error.response?.data?.message || 'Login failed';
+      let message = 'Login failed';
+      if (error?.response?.data?.message) {
+        message = error.response.data.message;
+      } else if (error?.request && !error?.response) {
+        message = `Network error: cannot reach ${API_BASE_URL}`;
+      }
       Alert.alert('Error', message);
       return false;
     }

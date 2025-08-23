@@ -1,11 +1,12 @@
 import React, { useMemo, useRef, useState, useCallback, useEffect } from 'react';
-import { View, StyleSheet, Linking, TouchableOpacity } from 'react-native';
+import { View, StyleSheet, Linking, TouchableOpacity, Platform, NativeModules } from 'react-native';
 import { Card, Text, Appbar, ActivityIndicator, IconButton, ProgressBar, Button } from 'react-native-paper';
 import { WebView } from 'react-native-webview';
 // @ts-ignore
 import { RTCPeerConnection, RTCSessionDescription, RTCIceCandidate, RTCView } from 'react-native-webrtc';
 import io from 'socket.io-client';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import Constants from 'expo-constants';
 
 // Reads from EXPO_PUBLIC_LIVE_DASHBOARD_URL if provided, otherwise defaults to localhost
 const getLiveDashboardUrl = (): string => {
@@ -14,26 +15,46 @@ const getLiveDashboardUrl = (): string => {
   return envUrl ?? 'http://localhost:3000';
 };
 
-// API base for signaling (prefer env; otherwise derive from live dashboard URL)
-const getApiBaseEnv = (): string | undefined => {
+// Resolve API base for signaling similar to AuthContext
+const resolveApiBase = (liveUrl: string): string => {
+  // 1) Explicit env
   // @ts-ignore
-  const envUrl: string | undefined = process.env.EXPO_PUBLIC_API_BASE_URL;
-  return envUrl;
+  const explicit: string | undefined = process.env.EXPO_PUBLIC_API_BASE_URL;
+  if (explicit && explicit.trim()) return explicit.trim();
+
+  // 2) Try to infer from Expo/Metro hosts
+  const candidates: Array<string | undefined> = [
+    // @ts-ignore
+    (Constants as any)?.expoConfig?.hostUri,
+    // @ts-ignore
+    (Constants as any)?.expoConfig?.developer?.hostUri,
+    // @ts-ignore
+    (Constants as any)?.manifest?.debuggerHost,
+    // @ts-ignore
+    (NativeModules as any)?.SourceCode?.scriptURL,
+    liveUrl,
+  ];
+  for (const cand of candidates) {
+    if (!cand || typeof cand !== 'string') continue;
+    try {
+      const withProto = cand.includes('://') ? cand : `http://${cand}`;
+      const parsed = new URL(withProto);
+      const host = parsed.hostname;
+      const proto = parsed.protocol || 'http:';
+      if (host && host.trim()) {
+        return `${proto}//${host}:5000`;
+      }
+    } catch {}
+  }
+
+  // 3) Platform-specific last resorts
+  if (Platform.OS === 'android') return 'http://10.0.2.2:5000';
+  return 'http://127.0.0.1:5000';
 };
 
 const LiveStreamTab: React.FC = () => {
   const liveUrl = useMemo(() => getLiveDashboardUrl(), []);
-  const apiBaseUrl = useMemo(() => {
-    const fromEnv = getApiBaseEnv();
-    if (fromEnv) return fromEnv;
-    try {
-      const u = new URL(liveUrl);
-      // assume backend on same host, port 5000
-      return `${u.protocol}//${u.hostname}:5000`;
-    } catch {
-      return 'http://localhost:5000';
-    }
-  }, [liveUrl]);
+  const apiBaseUrl = useMemo(() => resolveApiBase(liveUrl), [liveUrl]);
   const webRef = useRef<WebView>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [progress, setProgress] = useState<number>(0);
@@ -43,17 +64,27 @@ const LiveStreamTab: React.FC = () => {
   const pcRef = useRef<any>(null);
   const socketRef = useRef<any>(null);
   const [remoteStream, setRemoteStream] = useState<any>(null);
+  const viewerUrl = useMemo(() => `${liveUrl.replace(/\/$/, '')}/webrtc/view-guest`, [liveUrl]);
 
   const startNativeViewer = useCallback(async () => {
     try {
       setNativeViewer(true);
       setStatus('connecting');
   
-      const socket = io(apiBaseUrl, { path: '/socket.io' });
+      const socket = io(apiBaseUrl, { path: '/socket.io', transports: ['websocket'] });
       socketRef.current = socket;
   
       const ROOM = 'guardian-room-1';
-      socket.emit('webrtc-join', { room: ROOM });
+      socket.on('connect', () => {
+        setStatus('socket connected');
+        try {
+          socket.emit('webrtc-join', { room: ROOM, role: 'viewer' });
+          socket.emit('viewer-ready', { room: ROOM, from: socket.id });
+        } catch {}
+      });
+      socket.on('connect_error', (err: any) => {
+        try { setStatus(`socket error: ${String(err?.message || err)}`); } catch {}
+      });
   
       const pc: any = new RTCPeerConnection({
         iceServers: [{ urls: 'stun:stun.l.google.com:19302' }],
@@ -163,7 +194,10 @@ const LiveStreamTab: React.FC = () => {
         } catch (_) {}
       });
   
-      socket.emit('viewer-ready', { room: ROOM });
+      // Fallback trigger in case connect event didn't fire
+      setTimeout(() => {
+        try { socket.emit('viewer-ready', { room: ROOM, from: socket.id }); } catch {}
+      }, 1000);
   
     } catch (e) {
       setStatus('error');
@@ -201,11 +235,10 @@ const LiveStreamTab: React.FC = () => {
   }, [liveUrl]);
 
 
-  // Open live in external browser by default
+  // Simple approach default: load Viewer page in WebView; native viewer available via button
   useEffect(() => {
-    Linking.openURL(liveUrl).catch(() => {});
-    // no cleanup needed
-  }, [liveUrl]);
+    setNativeViewer(false);
+  }, []);
 
   const stopNativeViewer = useCallback(() => {
     try {
@@ -257,16 +290,31 @@ const LiveStreamTab: React.FC = () => {
                   )}
                 </View>
               ) : (
-                <View style={styles.externalBox}>
-                  <Text style={{ marginBottom: 8 }}>Live video opens in your browser.</Text>
-                  <Button mode="contained" onPress={handleOpenExternal}>Open Live in Browser</Button>
-                </View>
+                <WebView
+                  ref={webRef}
+                  source={{ uri: viewerUrl }}
+                  style={styles.webview}
+                  javaScriptEnabled
+                  domStorageEnabled
+                  allowsInlineMediaPlayback
+                  mediaPlaybackRequiresUserAction={false}
+                  onLoadStart={() => { setIsLoading(true); setHasError(false); }}
+                  onLoadEnd={() => setIsLoading(false)}
+                  onLoadProgress={({ nativeEvent }: any) => setProgress(nativeEvent?.progress ?? 0)}
+                  onError={() => { setHasError(true); setIsLoading(false); }}
+                />
               )}
 
               {isLoading && (
                 <View style={styles.loadingOverlay}>
                   <ActivityIndicator animating color="#667eea" size={36} />
                   <Text style={styles.loadingText}>Connecting to live feed…</Text>
+                </View>
+              )}
+              {!nativeViewer && (
+                <View style={styles.toggleRow}>
+                  <Button mode="text" onPress={startNativeViewer}>Use Native (beta)</Button>
+                  <Button mode="text" onPress={handleOpenExternal}>Open in Browser</Button>
                 </View>
               )}
             </>
