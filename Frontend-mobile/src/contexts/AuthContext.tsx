@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import axios from 'axios';
 import { Alert } from 'react-native';
+import { NativeModules } from 'react-native';
 
 interface User {
   id: string;
@@ -34,6 +35,30 @@ export const useAuth = () => {
 };
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  // API base URL resolution: prefer explicit env; else derive from live dashboard URL host; else localhost
+  // @ts-ignore
+  const API_BASE_URL: string = (() => {
+    // @ts-ignore
+    const explicit: string | undefined = process.env.EXPO_PUBLIC_API_BASE_URL;
+    if (explicit) return explicit;
+    try {
+      // @ts-ignore
+      const live: string | undefined = process.env.EXPO_PUBLIC_LIVE_DASHBOARD_URL;
+      if (live) {
+        const u = new URL(live);
+        return `${u.protocol}//${u.hostname}:5000`;
+      }
+    } catch {}
+    // Dev fallback: derive host from Metro bundle URL
+    try {
+      const scriptURL: string | undefined = (NativeModules as any)?.SourceCode?.scriptURL;
+      if (scriptURL) {
+        const u = new URL(scriptURL);
+        return `${u.protocol}//${u.hostname}:5000`;
+      }
+    } catch {}
+    return 'http://localhost:5000';
+  })();
   const [user, setUser] = useState<User | null>(null);
   const [token, setToken] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -61,7 +86,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           
           // Verify token is still valid
           try {
-            await axios.get('http://localhost:5000/api/users/profile');
+            await axios.get(`${API_BASE_URL}/api/users/profile`);
           } catch (error) {
             // Token is invalid, clear storage
             await AsyncStorage.multiRemove(['token', 'user']);
@@ -81,7 +106,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const login = async (email: string, password: string): Promise<boolean> => {
     try {
-      const response = await axios.post('http://localhost:5000/api/auth/login', {
+      const response = await axios.post(`${API_BASE_URL}/api/auth/login`, {
         email,
         password,
       });
@@ -106,7 +131,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const register = async (userData: any): Promise<boolean> => {
     try {
-      const response = await axios.post('http://localhost:5000/api/auth/register', userData);
+      const response = await axios.post(`${API_BASE_URL}/api/auth/register`, userData);
 
       const { token: newToken, user: newUser } = response.data;
 
@@ -136,7 +161,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const updateProfile = async (profileData: any): Promise<boolean> => {
     try {
-      const response = await axios.put('http://localhost:5000/api/users/profile', profileData);
+      const response = await axios.put(`${API_BASE_URL}/api/users/profile`, profileData);
       const updatedUser = response.data.user;
       
       setUser(updatedUser);

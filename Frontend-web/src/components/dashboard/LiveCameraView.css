@@ -1,289 +1,452 @@
 .live-camera-view {
-  background: white;
-  border-radius: 16px;
-  padding: 24px;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
-  margin-bottom: 24px;
-}
-
-.camera-header {
   display: flex;
-  justify-content: space-between;
+  flex-direction: column;
   align-items: center;
-  margin-bottom: 20px;
-  padding-bottom: 16px;
-  border-bottom: 2px solid #f0f0f0;
-}
-
-.camera-header h3 {
-  margin: 0;
-  color: #333;
-  font-size: 1.5rem;
-  font-weight: 600;
-}
-
-.camera-status {
-  display: flex;
-  align-items: center;
-}
-
-.status-indicator {
-  padding: 8px 16px;
-  border-radius: 20px;
-  font-size: 0.9rem;
-  font-weight: 500;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.status-indicator.active {
-  background: #d4edda;
-  color: #155724;
-  border: 1px solid #c3e6cb;
-}
-
-.status-indicator.loading {
-  background: #fff3cd;
-  color: #856404;
-  border: 1px solid #ffeaa7;
-}
-
-.status-indicator.inactive {
+  gap: 20px;
+  padding: 20px;
   background: #f8f9fa;
-  color: #6c757d;
-  border: 1px solid #dee2e6;
-}
-
-.status-indicator.error {
-  background: #f8d7da;
-  color: #721c24;
-  border: 1px solid #f5c6cb;
+  border-radius: 12px;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
 }
 
 .camera-container {
-  margin-bottom: 20px;
-}
-
-.camera-error {
-  background: #f8f9fa;
-  border: 2px dashed #dee2e6;
-  border-radius: 12px;
-  padding: 40px 20px;
-  text-align: center;
-  color: #6c757d;
-}
-
-.error-icon {
-  font-size: 3rem;
-  margin-bottom: 16px;
-  display: block;
-}
-
-.camera-error p {
-  margin: 0 0 20px 0;
-  font-size: 1rem;
-  color: #495057;
-}
-
-.camera-error .btn {
-  padding: 10px 20px;
-  border: none;
-  border-radius: 8px;
-  background: #007bff;
-  color: white;
-  cursor: pointer;
-  font-weight: 500;
-  transition: all 0.3s ease;
-}
-
-.camera-error .btn:hover {
-  background: #0056b3;
-  transform: translateY(-2px);
-}
-
-.video-container {
   position: relative;
-  border-radius: 12px;
+  /* Remove fixed width/height, let JS set size */
+  border-radius: 8px;
   overflow: hidden;
-  background: #000;
-  aspect-ratio: 4/3;
-  max-width: 100%;
+  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.2);
 }
 
 .camera-video {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  border-radius: 12px;
+  position: relative;
+  z-index: 1;
+  object-fit: contain;
+  background: #000;
+  /* Remove width: 100%; height: 100%; and object-fit: cover; */
+}
+
+.detection-canvas {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  pointer-events: none;
+  /* Remove width: 100%; height: 100%; */
 }
 
 .detection-overlay {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(0, 123, 255, 0.1);
   display: flex;
-  align-items: center;
-  justify-content: center;
-  pointer-events: none;
+  flex-direction: column;
+  gap: 15px;
+  width: 100%;
+  max-width: 640px;
 }
 
-.detection-box {
-  background: rgba(0, 123, 255, 0.9);
-  color: white;
-  padding: 12px 24px;
+.connection-status {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 16px;
+  background: #fff;
   border-radius: 8px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.status-indicator {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  transition: all 0.3s ease;
+}
+
+.status-indicator.connected {
+  background: #28a745;
+  box-shadow: 0 0 8px rgba(40, 167, 69, 0.6);
+}
+
+.status-indicator.disconnected {
+  background: #dc3545;
+  box-shadow: 0 0 8px rgba(220, 53, 69, 0.6);
+}
+
+.status-text {
   font-weight: 600;
-  font-size: 1rem;
-  box-shadow: 0 4px 12px rgba(0, 123, 255, 0.3);
-  animation: pulse 2s infinite;
+  color: #495057;
 }
 
-@keyframes pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.7; }
-}
-
-.detection-text {
+/* Service Status Styles */
+.service-status {
   display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.camera-info {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-  gap: 16px;
-  padding: 16px;
+  flex-direction: column;
+  gap: 10px;
+  padding: 15px;
   background: #f8f9fa;
-  border-radius: 12px;
+  border-radius: 8px;
+  border: 1px solid #dee2e6;
 }
 
-.info-item {
+.status-item {
   display: flex;
   justify-content: space-between;
   align-items: center;
   padding: 8px 0;
 }
 
-.info-label {
+.status-label {
+  font-weight: 600;
+  color: #495057;
+}
+
+.status-value {
   font-weight: 500;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 0.9rem;
+}
+
+.status-value.available,
+.status-value.enabled {
+  background: #d4edda;
+  color: #155724;
+  border: 1px solid #c3e6cb;
+}
+
+.status-value.unavailable,
+.status-value.disabled {
+  background: #f8d7da;
+  color: #721c24;
+  border: 1px solid #f5c6cb;
+}
+
+.retry-button {
+  background: #007bff;
+  color: white;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 6px;
+  font-size: 0.9rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  align-self: center;
+  margin-top: 5px;
+}
+
+.retry-button:hover {
+  background: #0056b3;
+  transform: translateY(-1px);
+}
+
+.retry-button:active {
+  transform: translateY(0);
+}
+
+/* Error Panel Styles */
+.error-panel {
+  background: #fff3cd;
+  border: 1px solid #ffeaa7;
+  border-radius: 8px;
+  padding: 15px;
+  margin-top: 10px;
+}
+
+.error-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.error-header h5 {
+  margin: 0;
+  color: #856404;
+  font-size: 1rem;
+}
+
+.clear-errors-button {
+  background: #ffc107;
+  color: #856404;
+  border: none;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 0.8rem;
+  cursor: pointer;
+  transition: background 0.2s ease;
+}
+
+.clear-errors-button:hover {
+  background: #e0a800;
+}
+
+.error-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.error-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px;
+  background: #fff;
+  border-radius: 4px;
+  border-left: 3px solid #ffc107;
+}
+
+.error-message {
+  color: #856404;
+  font-size: 0.9rem;
+  flex: 1;
+}
+
+.error-time {
+  color: #6c757d;
+  font-size: 0.8rem;
+  margin-left: 10px;
+}
+
+/* Debug Info Styles */
+.debug-info {
+  text-align: center;
+  padding: 8px;
+  background: #f8f9fa;
+  border-radius: 6px;
+  border: 1px solid #dee2e6;
+  margin-top: 10px;
+}
+
+.debug-info small {
+  color: #6c757d;
+  font-size: 0.8rem;
+}
+
+.detection-status {
+  background: #fff;
+  border: 3px solid;
+  border-radius: 12px;
+  padding: 20px;
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+  transition: all 0.3s ease;
+}
+
+.detection-status:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 12px rgba(0, 0, 0, 0.15);
+}
+
+.status-display h4 {
+  margin: 0 0 15px 0;
+  font-size: 1.4rem;
+  font-weight: 700;
+  text-align: center;
+  color: #212529;
+}
+
+.detection-details {
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+}
+
+.fall-risk-section {
+  text-align: center;
+  padding: 12px;
+  border-radius: 8px;
+  background: #f8f9fa;
+}
+
+.fall-risk {
+  margin: 0;
+  font-size: 1.1rem;
+  font-weight: 600;
+}
+
+.risk-level {
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-weight: 700;
+}
+
+.risk-level.high {
+  background: #dc3545;
+  color: white;
+}
+
+.risk-level.low {
+  background: #28a745;
+  color: white;
+}
+
+.body-parts-status {
+  background: #f8f9fa;
+  padding: 15px;
+  border-radius: 8px;
+}
+
+.body-parts-status h5 {
+  margin: 0 0 12px 0;
+  font-size: 1.1rem;
+  color: #495057;
+  text-align: center;
+}
+
+.body-part {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 0;
+  border-bottom: 1px solid #dee2e6;
+}
+
+.body-part:last-child {
+  border-bottom: none;
+}
+
+.part-name {
+  font-weight: 600;
+  color: #495057;
+}
+
+.part-name.moving {
+  color: #28a745;
+}
+
+.part-name.still {
+  color: #6c757d;
+}
+
+.part-status {
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 0.9rem;
+}
+
+.part-status.moving {
+  background: #d4edda;
+  color: #155724;
+}
+
+.part-status.still {
+  background: #e2e3e5;
+  color: #383d41;
+}
+
+.part-velocity {
+  font-family: monospace;
   color: #6c757d;
   font-size: 0.9rem;
 }
 
-.info-value {
+.confidence {
+  text-align: center;
+  margin: 15px 0 0 0;
+  padding: 12px;
+  background: #e7f3ff;
+  border-radius: 8px;
+  color: #0c5460;
   font-weight: 600;
-  color: #333;
-  font-size: 0.9rem;
+}
+
+.confidence-value {
+  color: #0056b3;
+  font-weight: 700;
+}
+
+.camera-placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 640px;
+  height: 200px;
+  background: #e9ecef;
+  border: 2px dashed #adb5bd;
+  border-radius: 8px;
+  color: #6c757d;
+  font-size: 1.1rem;
+  text-align: center;
 }
 
 /* Responsive design */
 @media (max-width: 768px) {
   .live-camera-view {
-    padding: 20px;
-    margin: 0 16px 24px 16px;
+    padding: 15px;
   }
   
-  .camera-header {
-    flex-direction: column;
-    gap: 12px;
-    align-items: flex-start;
+  .camera-container {
+    width: 100%;
+    max-width: 400px;
+    height: 300px;
   }
   
-  .camera-header h3 {
-    font-size: 1.3rem;
+  .detection-canvas {
+    width: 100%;
+    height: 100%;
   }
   
-  .camera-info {
-    grid-template-columns: 1fr;
-    gap: 12px;
+  .camera-placeholder {
+    width: 100%;
+    max-width: 400px;
+    height: 150px;
   }
   
-  .info-item {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 4px;
-  }
-}
-
-@media (max-width: 480px) {
-  .live-camera-view {
-    padding: 16px;
+  .detection-status {
+    padding: 15px;
   }
   
-  .camera-header h3 {
+  .status-display h4 {
     font-size: 1.2rem;
   }
   
-  .status-indicator {
-    padding: 6px 12px;
-    font-size: 0.8rem;
+  .body-part {
+    flex-direction: column;
+    gap: 5px;
+    text-align: center;
   }
-} 
 
-/* Human Detection Overlay */
-.human-detection-overlay {
-  position: absolute;
-  top: 10px;
-  right: 10px;
-  background: rgba(0, 0, 0, 0.8);
-  color: white;
-  padding: 15px;
-  border-radius: 8px;
-  border: 2px solid;
-  min-width: 200px;
-  backdrop-filter: blur(5px);
+  .service-status {
+    padding: 12px;
+  }
+
+  .status-item {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 5px;
+  }
+
+  .retry-button {
+    width: 100%;
+    margin-top: 10px;
+  }
+
+  .error-panel {
+    padding: 12px;
+  }
+
+  .error-item {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 5px;
+  }
 }
 
-.human-status {
-  display: flex;
-  align-items: center;
-  margin-bottom: 10px;
-  font-weight: bold;
+/* Animation for moving parts */
+@keyframes pulse {
+  0% { opacity: 1; }
+  50% { opacity: 0.7; }
+  100% { opacity: 1; }
 }
 
-.human-icon {
-  font-size: 1.2em;
-  margin-right: 8px;
+.part-status.moving {
+  animation: pulse 2s infinite;
 }
 
-.human-text {
-  font-size: 0.9em;
+/* Fall risk warning animation */
+@keyframes warning {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.05); }
+  100% { transform: scale(1); }
 }
 
-.human-metrics {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 8px;
-  font-size: 0.8em;
-}
-
-.metric {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
-.metric-label {
-  color: #ccc;
-  font-size: 0.75em;
-}
-
-.metric-value {
-  font-weight: bold;
-  color: #fff;
-}
-
-/* Status indicator for AI connection */
-.status-indicator.connected {
-  background: #28a745;
-  color: white;
-  padding: 4px 8px;
-  border-radius: 4px;
-  font-size: 0.8em;
-  margin-left: 8px;
+.risk-level.high {
+  animation: warning 1.5s infinite;
 } 

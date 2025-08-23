@@ -1,284 +1,416 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
+import HumanDetectionService from '../../services/HumanDetectionService';
+import { toast } from 'react-toastify';
 import './LiveCameraView.css';
 
 const LiveCameraView = ({ isDetecting }) => {
-  const [stream, setStream] = useState(null);
-  const [error, setError] = useState(null);
-  const [humanDetection, setHumanDetection] = useState({
+  const videoRef = useRef(null);
+  const canvasRef = useRef(null);
+  const detectionServiceRef = useRef(null);
+  const [isConnected, setIsConnected] = useState(false);
+  const [detection, setDetection] = useState({
     isHumanPresent: false,
     isMoving: false,
+    fallRisk: false,
+    fallConfidence: 0.0,
     confidence: 0.0,
-    motionIntensity: 0.0,
-    humanCount: 0,
-    movingHumanCount: 0,
-    stationaryHumanCount: 0
+    bodyParts: {
+      head: { isMoving: false, velocity: 0 },
+      arms: { isMoving: false, velocity: 0 },
+      legs: { isMoving: false, velocity: 0 },
+      torso: { isMoving: false, velocity: 0 }
+    }
   });
-  const [isConnected, setIsConnected] = useState(false);
-  const videoRef = useRef(null);
-  const pollingRef = useRef(null);
 
-  const API_BASE_URL = 'http://localhost:5001';
+  const [serviceStatus, setServiceStatus] = useState({
+    isInitialized: false,
+    poseAvailable: false,
+    faceDetectionEnabled: false,
+    faceDetectionAvailable: false,
+    cameraRunning: false
+  });
 
+  const [errors, setErrors] = useState([]);
+
+  // Sync canvas to video size after refs are created
   useEffect(() => {
+    const v = videoRef.current;
+    const c = canvasRef.current;
+    if (!v || !c) return;
+
+    const sync = () => {
+      if (v.videoWidth && v.videoHeight) {
+        c.width = v.videoWidth;
+        c.height = v.videoHeight;
+        // keep CSS size identical (prevents blurry scaling)
+        c.style.width = v.videoWidth + 'px';
+        c.style.height = v.videoHeight + 'px';
+        // match the video tag CSS size too
+        v.style.width = v.videoWidth + 'px';
+        v.style.height = v.videoHeight + 'px';
+        console.log('[sync] video', v.videoWidth, v.videoHeight, 'canvas', c.width, c.height);
+      }
+    };
+
+    v.addEventListener('loadedmetadata', sync);
+    v.addEventListener('resize', sync);
+    // if already ready, sync now
+    if (v.readyState >= 2) sync();
+
+    return () => {
+      v.removeEventListener('loadedmetadata', sync);
+      v.removeEventListener('resize', sync);
+    };
+  }, []);
+
+  // Initialize human detection service
+  useEffect(() => {
+    const initializeService = async () => {
+      try {
+        detectionServiceRef.current = new HumanDetectionService();
+        
+        // Initialize the service first
+        console.log('Initializing human detection service...');
+        const initialized = await detectionServiceRef.current.initialize();
+        
+        if (initialized) {
+          console.log('Service initialized successfully');
+          const status = detectionServiceRef.current.getServiceStatus();
+          setServiceStatus(status);
+          console.log('Initial service status:', status);
+        } else {
+          console.error('Failed to initialize service');
+          setErrors(prev => [...prev, { 
+            message: 'Failed to initialize human detection service', 
+            timestamp: Date.now() 
+          }]);
+        }
+      } catch (error) {
+        console.error('Error initializing service:', error);
+        setErrors(prev => [...prev, { 
+          message: `Service initialization error: ${error.message}`, 
+          timestamp: Date.now() 
+        }]);
+      }
+    };
+
+    initializeService();
+    
+    return () => {
+      if (detectionServiceRef.current) {
+        detectionServiceRef.current.dispose();
+      }
+    };
+  }, []);
+
+  // Start/stop human detection based on detection state
+  useEffect(() => {
+    if (!detectionServiceRef.current) return;
+
     if (isDetecting) {
-      startCamera();
       startHumanDetection();
     } else {
-      stopCamera();
       stopHumanDetection();
     }
 
     return () => {
-      stopCamera();
       stopHumanDetection();
     };
   }, [isDetecting]);
 
+  // Update detection results and service status periodically
+  useEffect(() => {
+    if (!isDetecting) return;
+
+    const interval = setInterval(() => {
+      if (detectionServiceRef.current) {
+        try {
+          const results = detectionServiceRef.current.getDetectionResults();
+          setDetection(results);
+
+          // Trigger fall alert toast once per detection episode
+          if (results.fallDetected && !window.__gc_lastFallAlertTs) {
+            window.__gc_lastFallAlertTs = Date.now();
+            toast.error('🚨 Fall detected! Are you okay?', { autoClose: 8000 });
+          }
+          if (!results.fallDetected) {
+            window.__gc_lastFallAlertTs = null;
+          }
+          
+          // Update service status
+          const status = detectionServiceRef.current.getServiceStatus();
+          setServiceStatus(status);
+          
+          // Clear errors if service is working
+          if (status.isInitialized && status.poseAvailable) {
+            setErrors([]);
+          }
+        } catch (error) {
+          console.error('Error updating detection results:', error);
+          setErrors(prev => [...prev, { 
+            message: error.message, 
+            timestamp: Date.now() 
+          }]);
+        }
+      }
+    }, 100); // Update 10 times per second
+
+    return () => clearInterval(interval);
+  }, [isDetecting]);
+
   const startHumanDetection = async () => {
     try {
-      const response = await fetch(`${API_BASE_URL}/human/start`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-      });
-
-      const data = await response.json();
-      
-      if (data.success) {
-        setIsConnected(true);
-        startPolling();
-      }
-    } catch (error) {
-      console.error('Human detection server not connected:', error);
-    }
-  };
-
-  const stopHumanDetection = async () => {
-    try {
-      const response = await fetch(`${API_BASE_URL}/human/stop`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-      });
-
-      const data = await response.json();
-      
-      if (data.success) {
-        setIsConnected(false);
-        stopPolling();
-      }
-    } catch (error) {
-      console.error('Failed to stop human detection:', error);
-    }
-  };
-
-  const startPolling = () => {
-    pollingRef.current = setInterval(async () => {
-      try {
-        const response = await fetch(`${API_BASE_URL}/human/status`);
-        const data = await response.json();
-
-        if (data.error) return;
-
-        const newDetection = {
-          isHumanPresent: data.is_human_present || false,
-          isMoving: data.is_moving || false,
-          confidence: data.confidence || 0.0,
-          motionIntensity: data.motion_intensity || 0.0,
-          humanCount: data.human_count || 0,
-          movingHumanCount: data.moving_human_count || 0,
-          stationaryHumanCount: data.stationary_human_count || 0
-        };
-
-        setHumanDetection(newDetection);
-
-        // Remove notifications - just update state silently
-        // const wasHumanPresent = humanDetection.isHumanPresent;
-        // const wasMoving = humanDetection.isMoving;
+      if (detectionServiceRef.current && videoRef.current && canvasRef.current) {
+        console.log('Starting human detection...');
+        console.log('Video element:', videoRef.current);
+        console.log('Canvas element:', canvasRef.current);
         
-        // if (newDetection.isHumanPresent && !wasHumanPresent) {
-        //   const motionType = newDetection.isMoving ? '🏃 Moving' : '🧍 Stationary';
-        //   toast.info(`${motionType} human detected`, {
-        //     autoClose: 2000,
-        //     position: 'top-right',
-        //   });
-        // } else if (!newDetection.isHumanPresent && wasHumanPresent) {
-        //   toast.info('👤 Human left the view', {
-        //     autoClose: 2000,
-        //     position: 'top-right',
-        //   });
-        // } else if (newDetection.isHumanPresent && wasHumanPresent && newDetection.isMoving !== wasMoving) {
-        //   const motionType = newDetection.isMoving ? '🏃 Started moving' : '🧍 Stopped moving';
-        //   toast.info(`${motionType}`, {
-        //     autoClose: 1500,
-        //     position: 'top-right',
-        //   });
-        // }
+        // Check if video is ready
+        if (videoRef.current.readyState < 2) {
+          console.log('Video not ready, waiting...');
+          await new Promise((resolve) => {
+            videoRef.current.onloadeddata = resolve;
+            setTimeout(resolve, 5000); // Fallback timeout
+          });
+        }
+        
+        const success = await detectionServiceRef.current.startDetection(
+          videoRef.current,
+          canvasRef.current
+        );
+        
+        if (success) {
+          setIsConnected(true);
+          console.log('Human detection started successfully');
+          // Clear any previous errors on successful start
+          setErrors([]);
+        } else {
+          console.error('Failed to start human detection');
+          setIsConnected(false);
+          setErrors(prev => [...prev, { 
+            message: 'Failed to start human detection service', 
+            timestamp: Date.now() 
+          }]);
+        }
+      } else {
+        console.error('Missing required elements:', {
+          service: !!detectionServiceRef.current,
+          video: !!videoRef.current,
+          canvas: !!canvasRef.current
+        });
+        setErrors(prev => [...prev, { 
+          message: 'Missing required elements for detection', 
+          timestamp: Date.now() 
+        }]);
+      }
+    } catch (error) {
+      console.error('Error starting human detection:', error);
+      setIsConnected(false);
+      setErrors(prev => [...prev, { 
+        message: `Error starting detection: ${error.message}`, 
+        timestamp: Date.now() 
+      }]);
+    }
+  };
+
+  const stopHumanDetection = () => {
+    if (detectionServiceRef.current) {
+      detectionServiceRef.current.stopDetection();
+      setIsConnected(false);
+      console.log('Human detection stopped');
+      // Clear errors when stopping detection
+      setErrors([]);
+    }
+  };
+
+  const retryFaceDetection = async () => {
+    if (detectionServiceRef.current) {
+      try {
+        console.log('Retrying face detection...');
+        const success = await detectionServiceRef.current.retryFaceDetection();
+        if (success) {
+          console.log('Face detection retry successful');
+          setErrors([]);
+        } else {
+          console.log('Face detection retry failed');
+        }
       } catch (error) {
-        setIsConnected(false);
+        console.error('Error retrying face detection:', error);
+        setErrors(prev => [...prev, { 
+          message: `Face detection retry failed: ${error.message}`, 
+          timestamp: Date.now() 
+        }]);
       }
-    }, 1000);
-  };
-
-  const stopPolling = () => {
-    if (pollingRef.current) {
-      clearInterval(pollingRef.current);
-      pollingRef.current = null;
     }
   };
 
-  const startCamera = async () => {
-    try {
-      const mediaStream = await navigator.mediaDevices.getUserMedia({
-        video: {
-          width: { ideal: 640 },
-          height: { ideal: 480 },
-          facingMode: 'user'
-        },
-        audio: false
-      });
+  const clearErrors = () => {
+    setErrors([]);
+  };
 
-      setStream(mediaStream);
-      if (videoRef.current) {
-        videoRef.current.srcObject = mediaStream;
-      }
-      setError(null);
-    } catch (err) {
-      console.error('Error accessing camera:', err);
-      setError('Camera access denied. Please allow camera permissions.');
+  // Status helpers
+  const getStatusColor = () => {
+    if (detection.fallRisk) return '#dc3545';
+    if (detection.isHumanPresent) return '#28a745';
+    return '#6c757d';
+  };
+
+  const getStatusText = () => {
+    if (detection.fallDetected || detection.fallRisk) return '🚨 Fall Detected!';
+    if (detection.isHumanPresent) {
+      return detection.isMoving ? '👤 Human Moving' : '👤 Human Present';
     }
+    return 'No Human Detected';
   };
 
-  const stopCamera = () => {
-    if (stream) {
-      stream.getTracks().forEach(track => track.stop());
-      setStream(null);
+  const getFallRiskText = () => {
+    if (detection.fallDetected || detection.fallRisk) {
+      const conf = (Math.max(detection.fallConfidence || 0, detection.fallProb || 0) * 100).toFixed(0);
+      return `High (${conf}%)`;
     }
-    if (videoRef.current) {
-      videoRef.current.srcObject = null;
-    }
-  };
-
-  const getCameraStatus = () => {
-    if (error) return 'error';
-    if (stream && isDetecting) return 'active';
-    if (isDetecting) return 'loading';
-    return 'inactive';
-  };
-
-  const getHumanStatusColor = () => {
-    if (!humanDetection.isHumanPresent) return '#6c757d';
-    return humanDetection.isMoving ? '#ffc107' : '#28a745';
-  };
-
-  const getHumanStatusText = () => {
-    if (!humanDetection.isHumanPresent) return 'No Human';
-    return humanDetection.isMoving ? 'Moving Human' : 'Stationary Human';
-  };
-
-  const getHumanStatusIcon = () => {
-    if (!humanDetection.isHumanPresent) return '⚪';
-    return humanDetection.isMoving ? '🏃' : '🧍';
+    const conf = ((detection.fallProb || 0) * 100).toFixed(0);
+    return `Low (${conf}%)`;
   };
 
   return (
     <div className="live-camera-view">
-      <div className="camera-header">
-        <h3>📹 Live Camera Feed with Human Detection</h3>
-        <div className="camera-status">
-          <span className={`status-indicator ${getCameraStatus()}`}>
-            {error ? '🔴 Error' : 
-             stream && isDetecting ? '🟢 Active' : 
-             isDetecting ? '🟡 Loading...' : '⚪ Inactive'}
-          </span>
-          {isConnected && (
-            <span className="status-indicator connected">
-              🟢 AI Active
-            </span>
-          )}
-        </div>
+      <div className="camera-container">
+        <video
+          ref={videoRef}
+          autoPlay
+          playsInline
+          muted
+          className="camera-video"
+        />
+        <canvas
+          ref={canvasRef}
+          className="detection-canvas"
+          width={640}
+          height={480}
+        />
       </div>
 
-      <div className="camera-container">
-        {error ? (
-          <div className="camera-error">
-            <div className="error-icon">📷</div>
-            <p>{error}</p>
-            <button 
-              className="btn btn-primary"
-              onClick={startCamera}
-            >
-              🔄 Retry Camera
-            </button>
+      {isDetecting && (
+        <div className="detection-overlay">
+          <div className="connection-status">
+            <span className={`status-indicator ${isConnected ? 'connected' : 'disconnected'}`}></span>
+            <span className="status-text">
+              {isConnected ? 'Detection Active' : 'Detection Inactive'}
+            </span>
           </div>
-        ) : (
-          <div className="video-container">
-            <video
-              ref={videoRef}
-              autoPlay
-              playsInline
-              muted
-              className="camera-video"
-            />
-            {isDetecting && (
-              <div className="detection-overlay">
-                <div className="detection-box">
-                  <span className="detection-text">AI Monitoring Active</span>
-                </div>
-                
-                {/* Human Detection Overlay */}
-                <div className="human-detection-overlay" style={{ 
-                  borderColor: getHumanStatusColor() 
-                }}>
-                  <div className="human-status">
-                    <span className="human-icon">{getHumanStatusIcon()}</span>
-                    <span className="human-text">{getHumanStatusText()}</span>
-                  </div>
-                  <div className="human-metrics">
-                    <div className="metric">
-                      <span className="metric-label">Confidence:</span>
-                      <span className="metric-value">{humanDetection.confidence.toFixed(2)}</span>
-                    </div>
-                    <div className="metric">
-                      <span className="metric-label">Motion:</span>
-                      <span className="metric-value">{humanDetection.motionIntensity.toFixed(2)}</span>
-                    </div>
-                    <div className="metric">
-                      <span className="metric-label">Moving:</span>
-                      <span className="metric-value">{humanDetection.movingHumanCount}</span>
-                    </div>
-                    <div className="metric">
-                      <span className="metric-label">Stationary:</span>
-                      <span className="metric-value">{humanDetection.stationaryHumanCount}</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
+
+          {/* Service Status Information */}
+          <div className="service-status">
+            <div className="status-item">
+              <span className="status-label">Pose Detection:</span>
+              <span className={`status-value ${serviceStatus.poseAvailable ? 'available' : 'unavailable'}`}>
+                {serviceStatus.poseAvailable ? '✅ Available' : '❌ Unavailable'}
+              </span>
+            </div>
+            <div className="status-item">
+              <span className="status-label">Face Detection:</span>
+              <span className={`status-value ${serviceStatus.faceDetectionEnabled ? 'enabled' : 'disabled'}`}>
+                {serviceStatus.faceDetectionEnabled ? '✅ Enabled' : '❌ Disabled'}
+              </span>
+            </div>
+            <div className="status-item">
+              <span className="status-label">Service Status:</span>
+              <span className={`status-value ${serviceStatus.isInitialized ? 'available' : 'unavailable'}`}>
+                {serviceStatus.isInitialized ? '✅ Initialized' : '❌ Not Initialized'}
+              </span>
+            </div>
+            {!serviceStatus.faceDetectionEnabled && (
+              <button 
+                className="retry-button"
+                onClick={retryFaceDetection}
+                title="Retry face detection initialization"
+              >
+                🔄 Retry Face Detection
+              </button>
             )}
           </div>
-        )}
-      </div>
 
-      <div className="camera-info">
-        <div className="info-item">
-          <span className="info-label">Status:</span>
-          <span className="info-value">
-            {isDetecting ? 'Monitoring' : 'Stopped'}
-          </span>
+          <div className="detection-status" style={{ borderColor: getStatusColor() }}>
+            <div className="status-display">
+              <h4>{getStatusText()}</h4>
+              
+              {detection.isHumanPresent && (
+                <div className="detection-details">
+                  <div className="fall-risk-section">
+                    <p className="fall-risk">
+                      Fall Risk: <span className={`risk-level ${detection.fallRisk ? 'high' : 'low'}`}>
+                        {getFallRiskText()}
+                      </span>
+                    </p>
+                  </div>
+                  
+                  <div className="body-parts-status">
+                    <h5>Body Parts Movement:</h5>
+                    {Object.entries(detection.bodyParts).map(([partName, data]) => (
+                      <div key={partName} className="body-part">
+                        <span className={`part-name ${data.isMoving ? 'moving' : 'still'}`}>
+                          {partName.charAt(0).toUpperCase() + partName.slice(1)}:
+                        </span>
+                        <span className={`part-status ${data.isMoving ? 'moving' : 'still'}`}>
+                          {data.isMoving ? 'Moving' : 'Still'}
+                        </span>
+                        <span className="part-velocity">
+                          ({data.velocity.toFixed(3)})
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                  
+                  {detection.confidence > 0 && (
+                    <p className="confidence">
+                      Overall Confidence: <span className="confidence-value">
+                        {(detection.confidence * 100).toFixed(1)}%
+                      </span>
+                    </p>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Error Display */}
+          {errors.length > 0 && (
+            <div className="error-panel">
+              <div className="error-header">
+                <h5>⚠️ Recent Errors ({errors.length})</h5>
+                <button className="clear-errors-button" onClick={clearErrors}>
+                  Clear
+                </button>
+              </div>
+              <div className="error-list">
+                {errors.slice(-3).map((error, index) => (
+                  <div key={index} className="error-item">
+                    <span className="error-message">{error.message}</span>
+                    <span className="error-time">
+                      {new Date(error.timestamp).toLocaleTimeString()}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Debug Information */}
+          <div className="debug-info">
+            <small>
+              Service Status: {serviceStatus.isInitialized ? 'Ready' : 'Not Ready'} | 
+              Errors: {errors.length} | 
+              Last Update: {new Date().toLocaleTimeString()}
+            </small>
+          </div>
         </div>
-        <div className="info-item">
-          <span className="info-label">Resolution:</span>
-          <span className="info-value">640x480</span>
+      )}
+
+      {!isDetecting && (
+        <div className="camera-placeholder">
+          <p>Click "Start Detection" to begin human monitoring</p>
         </div>
-        <div className="info-item">
-          <span className="info-label">Frame Rate:</span>
-          <span className="info-value">30 FPS</span>
-        </div>
-        <div className="info-item">
-          <span className="info-label">AI Detection:</span>
-          <span className="info-value">
-            {isConnected ? '🟢 Active' : '🔴 Inactive'}
-          </span>
-        </div>
-      </div>
+      )}
     </div>
   );
 };

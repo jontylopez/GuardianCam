@@ -12,6 +12,8 @@ import { AuthProvider } from "./contexts/AuthContext";
 import Login from "./components/auth/Login";
 import Register from "./components/auth/Register";
 import Dashboard from "./components/dashboard/Dashboard";
+import Viewer from "./components/dashboard/Viewer";
+import Broadcaster from "./components/dashboard/Broadcaster";
 import Profile from "./components/profile/Profile";
 import ProtectedRoute from "./components/auth/ProtectedRoute";
 
@@ -30,6 +32,22 @@ function App() {
               element={
                 <ProtectedRoute>
                   <Dashboard />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/webrtc/view"
+              element={
+                <ProtectedRoute>
+                  <Viewer />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/webrtc/broadcast"
+              element={
+                <ProtectedRoute>
+                  <Broadcaster />
                 </ProtectedRoute>
               }
             />

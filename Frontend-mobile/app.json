@@ -6,34 +6,33 @@
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
-    "newArchEnabled": true,
-    "projectId": "dev-project",
+
+    "ios": {
+      "bundleIdentifier": "com.guardiancam.app",
+      "supportsTablet": true,
+      "infoPlist": { "ITSAppUsesNonExemptEncryption": false }
+    },
+
+    "android": {
+      "package": "com.guardiancam.app",
+      "googleServicesFile": "./google-services.json"
+    },
+
     "splash": {
       "image": "./assets/splash-icon.png",
       "resizeMode": "contain",
       "backgroundColor": "#ffffff"
     },
-    "ios": {
-      "supportsTablet": true
-    },
-    "android": {
-      "adaptiveIcon": {
-        "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#ffffff"
-      },
-      "edgeToEdgeEnabled": true
-    },
-    "web": {
-      "favicon": "./assets/favicon.png"
-    },
+
+    "web": { "favicon": "./assets/favicon.png" },
+
     "plugins": [
-      [
-        "expo-notifications",
-        {
-          "icon": "./assets/notification-icon.png",
-          "color": "#ffffff"
-        }
-      ]
-    ]
+      ["expo-notifications", { "icon": "./assets/notification-icon.png", "color": "#ffffff" }],
+      ["expo-build-properties", { "ios": { "newArchEnabled": true }, "android": { "newArchEnabled": true } }]
+    ],
+
+    "extra": { "eas": { "projectId": "2679af21-a09e-4070-a94d-b76860439655" } },
+
+    "owner": "jontylopez"
   }
 }

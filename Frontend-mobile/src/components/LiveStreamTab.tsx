@@ -1,168 +1,279 @@
-import React, { useState, useEffect } from 'react';
-import { View, StyleSheet, Dimensions } from 'react-native';
-import { Text, Card, Button, Chip } from 'react-native-paper';
-import { Video, ResizeMode } from 'expo-av';
-import axios from 'axios';
+import React, { useMemo, useRef, useState, useCallback, useEffect } from 'react';
+import { View, StyleSheet, Linking, TouchableOpacity } from 'react-native';
+import { Card, Text, Appbar, ActivityIndicator, IconButton, ProgressBar, Button } from 'react-native-paper';
+import { WebView } from 'react-native-webview';
+// @ts-ignore
+import { RTCPeerConnection, RTCSessionDescription, RTCIceCandidate, RTCView } from 'react-native-webrtc';
+import io from 'socket.io-client';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
-const { width, height } = Dimensions.get('window');
+// Reads from EXPO_PUBLIC_LIVE_DASHBOARD_URL if provided, otherwise defaults to localhost
+const getLiveDashboardUrl = (): string => {
+  // @ts-ignore
+  const envUrl: string | undefined = process.env.EXPO_PUBLIC_LIVE_DASHBOARD_URL;
+  return envUrl ?? 'http://localhost:3000';
+};
+
+// API base for signaling (prefer env; otherwise derive from live dashboard URL)
+const getApiBaseEnv = (): string | undefined => {
+  // @ts-ignore
+  const envUrl: string | undefined = process.env.EXPO_PUBLIC_API_BASE_URL;
+  return envUrl;
+};
 
 const LiveStreamTab: React.FC = () => {
-  const [streamUrl, setStreamUrl] = useState<string | null>(null);
-  const [isConnected, setIsConnected] = useState(false);
-  const [humanStatus, setHumanStatus] = useState({
-    isHumanPresent: false,
-    isMoving: false,
-    confidence: 0,
-    motionIntensity: 0,
-  });
+  const liveUrl = useMemo(() => getLiveDashboardUrl(), []);
+  const apiBaseUrl = useMemo(() => {
+    const fromEnv = getApiBaseEnv();
+    if (fromEnv) return fromEnv;
+    try {
+      const u = new URL(liveUrl);
+      // assume backend on same host, port 5000
+      return `${u.protocol}//${u.hostname}:5000`;
+    } catch {
+      return 'http://localhost:5000';
+    }
+  }, [liveUrl]);
+  const webRef = useRef<WebView>(null);
+  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [progress, setProgress] = useState<number>(0);
+  const [hasError, setHasError] = useState<boolean>(false);
+  const [nativeViewer, setNativeViewer] = useState<boolean>(false);
+  const [status, setStatus] = useState<string>('idle');
+  const pcRef = useRef<any>(null);
+  const socketRef = useRef<any>(null);
+  const [remoteStream, setRemoteStream] = useState<any>(null);
 
+  const startNativeViewer = useCallback(async () => {
+    try {
+      setNativeViewer(true);
+      setStatus('connecting');
+  
+      const socket = io(apiBaseUrl, { path: '/socket.io' });
+      socketRef.current = socket;
+  
+      const ROOM = 'guardian-room-1';
+      socket.emit('webrtc-join', { room: ROOM });
+  
+      const pc: any = new RTCPeerConnection({
+        iceServers: [{ urls: 'stun:stun.l.google.com:19302' }],
+      });
+      pcRef.current = pc;
+  
+      // Receive-only video
+      try { (pc as any).addTransceiver?.('video', { direction: 'recvonly' }); } catch {}
+  
+      // Debug (optional)
+      (pc as any).onconnectionstatechange = () => setStatus(`pc: ${pc.connectionState}`);
+      (pc as any).oniceconnectionstatechange = () => {
+        if (pc.iceConnectionState === 'failed') setStatus('ice failed');
+      };
+  
+      (pc as any).onicecandidate = (e: any) => {
+        if (e?.candidate) socket.emit('webrtc-ice-candidate', { room: ROOM, candidate: e.candidate });
+      };
+  
+      // Track handler
+      (pc as any).ontrack = (ev: any) => {
+        const stream = ev?.streams?.[0];
+        if (stream) {
+          setRemoteStream(stream);
+          setIsLoading(false); // hide overlay
+        }
+      };
+      // ---- Perfect negotiation-ish guards for a viewer ----
+      let makingOffer = false;
+      let ignoreOffer = false;
+      const polite = true; // viewer is polite
+  
+  
+      // Clean old listeners before attaching
+      socket.off('webrtc-offer');
+      socket.off('webrtc-answer');
+      socket.off('webrtc-ice-candidate');
+  
+      socket.on('webrtc-offer', async ({ sdp }: any) => {
+        try {
+          if (!sdp || !sdp.type) return;
+  
+          const desc = new RTCSessionDescription(sdp);
+  
+          if (desc.type === 'answer') {
+            // We should not be getting answers on viewer; if we do, only apply
+            // when we actually have a local offer pending (have-local-offer)
+            if (pc.signalingState === 'have-local-offer') {
+              await pc.setRemoteDescription(desc);
+            } else {
+              // stray/echoed answer -> ignore
+            }
+            return;
+          }
+  
+          if (desc.type !== 'offer') return;
+  
+          setStatus('offer received');
+  
+          const readyForOffer =
+            !makingOffer &&
+            (pc.signalingState === 'stable' || pc.signalingState === 'have-local-offer');
+  
+          const offerCollision = !readyForOffer;
+  
+          ignoreOffer = !polite && offerCollision;
+          if (ignoreOffer) {
+            // impolite peer would ignore; we’re polite, so we’ll roll back
+            return;
+          }
+  
+          if (offerCollision) {
+            // Roll back our local offer and accept the remote one
+            await Promise.all([
+              pc.setLocalDescription({ type: 'rollback' } as any),
+              pc.setRemoteDescription(desc),
+            ]);
+          } else {
+            await pc.setRemoteDescription(desc);
+          }
+  
+          const answer: any = await pc.createAnswer();
+          await pc.setLocalDescription(answer as any);
+          setIsLoading(false);
+          socket.emit('webrtc-answer', { room: ROOM, sdp: answer as any });
+          setStatus('answer sent');
+        } catch (err) {
+          // Most common error here is "called in wrong state" from glare; swallow after guards
+          // console.warn('offer handler error', err);
+        }
+      });
+  
+      socket.on('webrtc-answer', async ({ sdp }: any) => {
+        try {
+          // Viewers generally shouldn't get answers, but if your server sends them,
+          // only apply when we are in have-local-offer
+          if (!sdp || sdp.type !== 'answer') return;
+          if (pc.signalingState === 'have-local-offer') {
+            await pc.setRemoteDescription(new RTCSessionDescription(sdp));
+          }
+        } catch (_) {}
+      });
+  
+      socket.on('webrtc-ice-candidate', async ({ candidate }: any) => {
+        try {
+          if (candidate) await pc.addIceCandidate(new RTCIceCandidate(candidate));
+        } catch (_) {}
+      });
+  
+      socket.emit('viewer-ready', { room: ROOM });
+  
+    } catch (e) {
+      setStatus('error');
+    }
+  }, [apiBaseUrl]);
+  
+
+  const handleReload = useCallback(() => {
+    setHasError(false);
+    setProgress(0);
+    setIsLoading(true);
+    if (nativeViewer) {
+      // restart native viewer
+      try {
+        if (pcRef.current) {
+          try { pcRef.current.close(); } catch {}
+          pcRef.current = null;
+        }
+        if (socketRef.current) {
+          try { socketRef.current.disconnect(); } catch {}
+          socketRef.current = null;
+        }
+      } catch {}
+      setTimeout(() => {
+        startNativeViewer();
+        setIsLoading(false);
+      }, 300);
+    } else {
+      webRef.current?.reload();
+    }
+  }, [nativeViewer, startNativeViewer]);
+
+  const handleOpenExternal = useCallback(() => {
+    Linking.openURL(liveUrl).catch(() => {});
+  }, [liveUrl]);
+
+
+  // Open live in external browser by default
   useEffect(() => {
-    // For now, we'll use a placeholder video or webcam stream
-    // In a real implementation, you'd connect to your camera stream
-    setStreamUrl('http://localhost:5001/video-feed'); // This would be your camera stream URL
-    
-    const interval = setInterval(fetchHumanStatus, 1000);
-    return () => clearInterval(interval);
+    Linking.openURL(liveUrl).catch(() => {});
+    // no cleanup needed
+  }, [liveUrl]);
+
+  const stopNativeViewer = useCallback(() => {
+    try {
+      setNativeViewer(false);
+      setStatus('idle');
+      if (pcRef.current) {
+        try { pcRef.current.close(); } catch {}
+        pcRef.current = null;
+      }
+      if (socketRef.current) {
+        try { socketRef.current.disconnect(); } catch {}
+        socketRef.current = null;
+      }
+    } catch {}
   }, []);
 
-  const fetchHumanStatus = async () => {
-    try {
-      const response = await axios.get('http://localhost:5001/human/status');
-      setHumanStatus({
-        isHumanPresent: response.data.is_human_present || false,
-        isMoving: response.data.is_moving || false,
-        confidence: response.data.confidence || 0,
-        motionIntensity: response.data.motion_intensity || 0,
-      });
-      setIsConnected(true);
-    } catch (error) {
-      setIsConnected(false);
-      console.error('Error fetching human status:', error);
-    }
-  };
-
-  const getStatusColor = () => {
-    if (!humanStatus.isHumanPresent) return '#6c757d';
-    return humanStatus.isMoving ? '#ffc107' : '#28a745';
-  };
-
-  const getStatusText = () => {
-    if (!humanStatus.isHumanPresent) return 'No Human Detected';
-    return humanStatus.isMoving ? 'Moving Human' : 'Stationary Human';
-  };
-
-  const getStatusIcon = () => {
-    if (!humanStatus.isHumanPresent) return 'account-off';
-    return humanStatus.isMoving ? 'run' : 'pause';
-  };
-
   return (
-    <View style={styles.container}>
-      {/* Video Stream */}
-      <Card style={styles.videoCard}>
-        <Card.Content style={styles.videoContainer}>
-          {streamUrl ? (
-            <Video
-              source={{ uri: streamUrl }}
-              style={styles.video}
-              useNativeControls={false}
-              resizeMode={ResizeMode.CONTAIN}
-              shouldPlay={true}
-              isLooping={true}
-            />
+    <SafeAreaView style={styles.container}>
+      <Card style={styles.card}>
+        <Appbar.Header mode="small" style={styles.appbar}>
+          <Appbar.Content title="Live Camera" subtitle={'Native WebRTC'} />
+          <Appbar.Action icon="reload" onPress={handleReload} accessibilityLabel="Reload" />
+        </Appbar.Header>
+
+        {isLoading && !hasError && (
+          <ProgressBar progress={progress} color="#667eea" style={styles.progress} />
+        )}
+
+        <View style={styles.content}>
+          {/* Native viewer is default; no toggle shown */}
+          {hasError ? (
+            <View style={styles.errorContainer}>
+              <Text style={styles.errorTitle}>Unable to load live dashboard</Text>
+              <Text style={styles.errorSubtitle}>Check your network connection or try again.</Text>
+              <IconButton icon="reload" mode="contained-tonal" size={28} onPress={handleReload} />
+              <Button mode="text" onPress={startNativeViewer}>
+                Try Native Viewer (beta)
+              </Button>
+            </View>
           ) : (
-            <View style={styles.placeholderContainer}>
-              <Text style={styles.placeholderText}>📹</Text>
-              <Text style={styles.placeholderTitle}>Live Camera Feed</Text>
-              <Text style={styles.placeholderSubtitle}>
-                Camera stream will appear here
-              </Text>
-            </View>
+            <>
+              {nativeViewer ? (
+                <View style={styles.nativeBox}>
+                  {remoteStream ? (
+                    // @ts-ignore
+                    <RTCView style={styles.nativeVideo} objectFit="cover" streamURL={remoteStream && remoteStream.toURL ? remoteStream.toURL() : ''} />
+                  ) : (
+                    <Text>Native viewer: {status}</Text>
+                  )}
+                </View>
+              ) : (
+                <View style={styles.externalBox}>
+                  <Text style={{ marginBottom: 8 }}>Live video opens in your browser.</Text>
+                  <Button mode="contained" onPress={handleOpenExternal}>Open Live in Browser</Button>
+                </View>
+              )}
+
+              {isLoading && (
+                <View style={styles.loadingOverlay}>
+                  <ActivityIndicator animating color="#667eea" size={36} />
+                  <Text style={styles.loadingText}>Connecting to live feed…</Text>
+                </View>
+              )}
+            </>
           )}
-
-          {/* Human Detection Overlay */}
-          <View style={[styles.overlay, { borderColor: getStatusColor() }]}>
-            <View style={styles.statusRow}>
-              <Chip 
-                icon={getStatusIcon()}
-                mode="outlined"
-                style={[styles.statusChip, { backgroundColor: 'rgba(0,0,0,0.8)' }]}
-                textStyle={{ color: '#fff' }}
-              >
-                {getStatusText()}
-              </Chip>
-            </View>
-            
-            <View style={styles.metricsContainer}>
-              <View style={styles.metric}>
-                <Text style={styles.metricLabel}>Confidence</Text>
-                <Text style={styles.metricValue}>
-                  {(humanStatus.confidence * 100).toFixed(1)}%
-                </Text>
-              </View>
-              <View style={styles.metric}>
-                <Text style={styles.metricLabel}>Motion</Text>
-                <Text style={styles.metricValue}>
-                  {(humanStatus.motionIntensity * 100).toFixed(1)}%
-                </Text>
-              </View>
-            </View>
-          </View>
-        </Card.Content>
+        </View>
       </Card>
-
-      {/* Connection Status */}
-      <Card style={styles.statusCard}>
-        <Card.Content>
-          <View style={styles.connectionRow}>
-            <Chip 
-              icon={isConnected ? 'wifi' : 'wifi-off'}
-              mode="outlined"
-              style={[
-                styles.connectionChip,
-                { backgroundColor: isConnected ? '#e8f5e8' : '#fff3cd' }
-              ]}
-            >
-              {isConnected ? 'Connected' : 'Disconnected'}
-            </Chip>
-          </View>
-          
-          <Text style={styles.statusText}>
-            {isConnected 
-              ? 'Live detection is active and monitoring'
-              : 'Unable to connect to camera system'
-            }
-          </Text>
-        </Card.Content>
-      </Card>
-
-      {/* Controls */}
-      <Card style={styles.controlsCard}>
-        <Card.Content>
-          <Text style={styles.controlsTitle}>Camera Controls</Text>
-          
-          <View style={styles.buttonRow}>
-            <Button
-              mode="contained"
-              onPress={() => console.log('Start recording')}
-              style={[styles.button, styles.recordButton]}
-              buttonColor="#dc3545"
-            >
-              Start Recording
-            </Button>
-            
-            <Button
-              mode="outlined"
-              onPress={() => console.log('Take snapshot')}
-              style={styles.button}
-              textColor="#667eea"
-            >
-              Take Snapshot
-            </Button>
-          </View>
-        </Card.Content>
-      </Card>
-    </View>
+    </SafeAreaView>
   );
 };
 
@@ -171,106 +282,80 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#f5f5f5',
   },
-  videoCard: {
+  card: {
     margin: 10,
     elevation: 4,
+    flex: 1,
+    overflow: 'hidden',
   },
-  videoContainer: {
-    position: 'relative',
-    height: height * 0.4,
+  appbar: {
+    backgroundColor: '#fff',
   },
-  video: {
+  progress: {
+    height: 3,
+  },
+  content: {
+    flex: 1,
+    padding: 0,
+  },
+  toggleRow: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+  webview: {
+    flex: 1,
+  },
+  loadingOverlay: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    top: 0,
+    bottom: 0,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(0,0,0,0.05)',
+  },
+  loadingText: {
+    marginTop: 10,
+    color: '#667eea',
+    fontWeight: '600',
+  },
+  nativeBox: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  nativeVideo: {
     width: '100%',
     height: '100%',
+    backgroundColor: '#000',
   },
-  placeholderContainer: {
+  externalBox: {
     flex: 1,
+    alignItems: 'center',
     justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#f0f0f0',
+    paddingHorizontal: 16,
   },
-  placeholderText: {
-    fontSize: 48,
-    marginBottom: 10,
-  },
-  placeholderTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#666',
-    marginBottom: 5,
-  },
-  placeholderSubtitle: {
-    fontSize: 14,
-    color: '#999',
-  },
-  overlay: {
-    position: 'absolute',
-    top: 10,
-    right: 10,
-    backgroundColor: 'rgba(0, 0, 0, 0.8)',
-    padding: 15,
-    borderRadius: 8,
-    borderWidth: 2,
-    minWidth: 200,
-  },
-  statusRow: {
-    marginBottom: 10,
-  },
-  statusChip: {
-    marginBottom: 5,
-  },
-  metricsContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-  metric: {
-    alignItems: 'center',
+  errorContainer: {
     flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 20,
   },
-  metricLabel: {
-    fontSize: 10,
-    color: '#ccc',
-    marginBottom: 2,
-  },
-  metricValue: {
-    fontSize: 14,
-    fontWeight: 'bold',
-    color: '#fff',
-  },
-  statusCard: {
-    margin: 10,
-    elevation: 2,
-  },
-  connectionRow: {
-    marginBottom: 10,
-  },
-  connectionChip: {
-    alignSelf: 'flex-start',
-  },
-  statusText: {
-    fontSize: 14,
-    color: '#666',
-  },
-  controlsCard: {
-    margin: 10,
-    elevation: 2,
-  },
-  controlsTitle: {
+  errorTitle: {
     fontSize: 16,
     fontWeight: 'bold',
-    marginBottom: 15,
     color: '#333',
+    marginBottom: 6,
   },
-  buttonRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-  button: {
-    flex: 0.48,
-  },
-  recordButton: {
-    marginBottom: 10,
+  errorSubtitle: {
+    fontSize: 13,
+    color: '#666',
+    marginBottom: 8,
+    textAlign: 'center',
   },
 });
 
-export default LiveStreamTab; 
+export default LiveStreamTab;

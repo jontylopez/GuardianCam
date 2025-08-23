@@ -2,8 +2,10 @@ import React, { useState } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import Navbar from '../layout/Navbar';
 import LiveFallDetection from './LiveFallDetection';
+import PushTest from './PushTest';
 import LiveCameraView from './LiveCameraView';
 import './Dashboard.css';
+import { Link } from 'react-router-dom';
 
 const Dashboard = () => {
   const { user } = useAuth();
@@ -19,17 +21,40 @@ const Dashboard = () => {
       
       <div className="dashboard-container">
         <div className="dashboard-header">
-          <h1>GuardianCam</h1>
-          <p>Live Fall Detection & Human Monitoring System</p>
+          <div>
+            <h1>GuardianCam</h1>
+            <p>Live Fall Detection & Human Monitoring</p>
+            {user && (
+              <p className="welcome-message">Welcome back, {user.name || user.email}</p>
+            )}
+          </div>
         </div>
 
         <div className="dashboard-content">
           <div className="main-section">
-            <LiveFallDetection onDetectionStateChange={handleDetectionStateChange} />
+            <div className="card">
+              <LiveFallDetection onDetectionStateChange={handleDetectionStateChange} />
+            </div>
+            <div className="card">
+              <LiveCameraView isDetecting={isDetecting} />
+            </div>
           </div>
           
           <div className="camera-section">
-            <LiveCameraView isDetecting={isDetecting} />
+            <div className="card">
+              <PushTest />
+            </div>
+            <div className="card">
+              <div className="info-card">
+                <h5>🔗 WebRTC Quick Links</h5>
+                <p>
+                  <Link to="/webrtc/broadcast">Start Broadcaster (Desktop)</Link>
+                  {' '}|{' '}
+                  <Link to="/webrtc/view">Open Viewer</Link>
+                </p>
+                <small>Use Broadcaster on your desktop and Viewer on your phone (or inside the mobile app’s Live tab).</small>
+              </div>
+            </div>
           </div>
         </div>
       </div>

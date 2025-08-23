@@ -1,50 +1,10 @@
 const express = require("express");
-const multer = require("multer");
-const path = require("path");
-const fs = require("fs");
-const { v4: uuidv4 } = require("uuid");
 const { body, validationResult } = require("express-validator");
 const { getFirestore } = require("../config/firebase");
 
 const router = express.Router();
 
-// Configure multer for video upload
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    const uploadPath = process.env.UPLOAD_PATH || "./uploads";
-    if (!fs.existsSync(uploadPath)) {
-      fs.mkdirSync(uploadPath, { recursive: true });
-    }
-    cb(null, uploadPath);
-  },
-  filename: (req, file, cb) => {
-    const uniqueName = `${uuidv4()}-${Date.now()}${path.extname(
-      file.originalname
-    )}`;
-    cb(null, uniqueName);
-  },
-});
-
-const upload = multer({
-  storage,
-  limits: {
-    fileSize: parseInt(process.env.MAX_FILE_SIZE) || 10 * 1024 * 1024, // 10MB
-  },
-  fileFilter: (req, file, cb) => {
-    // Allow video files
-    const allowedTypes = /mp4|avi|mov|mkv|webm/;
-    const extname = allowedTypes.test(
-      path.extname(file.originalname).toLowerCase()
-    );
-    const mimetype = allowedTypes.test(file.mimetype);
-
-    if (mimetype && extname) {
-      return cb(null, true);
-    } else {
-      cb(new Error("Only video files are allowed"));
-    }
-  },
-});
+// Python-based video/frame analysis removed; frontends handle on-device detection now.
 
 // Start fall detection monitoring
 router.post(
@@ -156,123 +116,7 @@ router.post("/stop-monitoring", async (req, res) => {
   }
 });
 
-// Upload video for fall detection analysis
-router.post(
-  "/analyze-video",
-  upload.single("video"),
-  [
-    body("location").optional().isString(),
-    body("description").optional().isString(),
-  ],
-  async (req, res) => {
-    try {
-      const errors = validationResult(req);
-      if (!errors.isEmpty()) {
-        return res.status(400).json({
-          error: "Validation failed",
-          details: errors.array(),
-        });
-      }
-
-      if (!req.file) {
-        return res.status(400).json({
-          error: "No video file provided",
-          message: "Please upload a video file",
-        });
-      }
-
-      const { location, description } = req.body;
-      const userId = req.user.uid;
-      const db = getFirestore();
-
-      // Create analysis record
-      const analysisData = {
-        userId,
-        videoPath: req.file.path,
-        videoName: req.file.originalname,
-        location,
-        description,
-        status: "processing",
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      };
-
-      const analysisRef = await db
-        .collection("fall_analyses")
-        .add(analysisData);
-      const analysisId = analysisRef.id;
-
-      // Integrate with Python model for fall detection
-      const PythonModelIntegration = require("../utils/pythonModelIntegration");
-      const modelIntegration = new PythonModelIntegration();
-
-      // Process video with Python model
-      modelIntegration
-        .processVideo(req.file.path, {
-          sensitivity: 0.7,
-          confidence: 0.8,
-        })
-        .then(async (result) => {
-          try {
-            await analysisRef.update({
-              status: "completed",
-              result: {
-                fallDetected: result.fallDetected,
-                confidence: result.confidence,
-                timestamp: result.timestamp,
-                modelVersion: result.modelVersion,
-                processingTime: result.processingTime,
-                frames: result.frames,
-                simulation: result.simulation || false,
-              },
-              updatedAt: new Date(),
-            });
-
-            // If fall detected, create alert
-            if (result.fallDetected) {
-              await db.collection("alerts").add({
-                userId,
-                analysisId,
-                type: "fall_detected",
-                severity: "high",
-                message: "Potential fall detected in video analysis",
-                location,
-                createdAt: new Date(),
-                status: "active",
-              });
-            }
-          } catch (error) {
-            console.error("Analysis processing error:", error);
-            await analysisRef.update({
-              status: "failed",
-              error: error.message,
-              updatedAt: new Date(),
-            });
-          }
-        })
-        .catch(async (error) => {
-          console.error("Model processing error:", error);
-          await analysisRef.update({
-            status: "failed",
-            error: error.message,
-            updatedAt: new Date(),
-          });
-        });
-
-      res.status(202).json({
-        message: "Video analysis started",
-        analysisId,
-        status: "processing",
-      });
-    } catch (error) {
-      console.error("Video analysis error:", error);
-      res.status(500).json({
-        error: "Failed to analyze video",
-        message: "Internal server error",
-      });
-    }
-  }
-);
+// Removed: /analyze-frames and /analyze-frames-direct endpoints (legacy Python integration)
 
 // Get analysis results
 router.get("/analysis/:analysisId", async (req, res) => {

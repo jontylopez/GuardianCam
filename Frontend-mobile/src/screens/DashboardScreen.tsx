@@ -19,7 +19,7 @@ const DashboardScreen: React.FC = () => {
         tabBarIcon: ({ focused, color, size }) => {
           let iconName: string;
 
-          if (route.name === 'Dashboard') {
+          if (route.name === 'Home') {
             iconName = focused ? 'home' : 'home-outline';
           } else if (route.name === 'LiveStream') {
             iconName = focused ? 'video' : 'video-outline';
@@ -43,10 +43,10 @@ const DashboardScreen: React.FC = () => {
       })}
     >
       <Tab.Screen 
-        name="Dashboard" 
+        name="Home" 
         component={DashboardTab}
         options={{ 
-          title: 'Dashboard',
+          title: 'Home',
           headerTitle: `Welcome, ${user?.firstName || 'User'}!`
         }}
       />

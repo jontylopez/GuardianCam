@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import * as Notifications from 'expo-notifications';
+import Constants from 'expo-constants';
 import { Platform, Alert } from 'react-native';
 import axios from 'axios';
 
@@ -26,6 +27,9 @@ Notifications.setNotificationHandler({
     shouldShowAlert: true,
     shouldPlaySound: true,
     shouldSetBadge: false,
+    // iOS specific fields to satisfy NotificationBehavior type in SDK 53+
+    shouldShowBanner: true,
+    shouldShowList: true,
   }),
 });
 
@@ -51,7 +55,6 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
   }, []);
 
   const registerForPushNotificationsAsync = async () => {
-    let token;
 
     if (Platform.OS === 'android') {
       await Notifications.setNotificationChannelAsync('default', {
@@ -76,53 +79,51 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
     }
 
     try {
-      // For development, we'll skip push token registration
-      // In production, you would need a real Expo project ID
-      console.log('Skipping push token registration in development mode');
-      setExpoPushToken('dev-token');
+      // Retrieve a real Expo push token (requires EAS dev/prod build)
+      const projectId =
+        // @ts-ignore
+        (Constants?.expoConfig?.extra?.eas?.projectId as string | undefined) ||
+        // @ts-ignore
+        (Constants?.expoConfig?.projectId as string | undefined);
+
+      if (!projectId) {
+        console.warn('No EAS projectId found in app config; cannot get Expo push token.');
+        return;
+      }
+
+      const { data } = await Notifications.getExpoPushTokenAsync({ projectId });
+      setExpoPushToken(data);
+      console.log('Expo push token:', data);
     } catch (error) {
-      console.error('Error getting push token:', error);
-      console.log('Push token error is expected in development mode');
+      console.warn('Failed to get Expo push token (expected in Expo Go):', error);
     }
   };
 
   const sendFallNotification = async () => {
-    try {
-      // Send notification to backend for logging
-      await axios.post('http://localhost:5000/api/notifications/fall-detected', {
-        expoPushToken,
-        timestamp: new Date().toISOString(),
-      });
-
-      // Show local notification (works in development)
-      await Notifications.scheduleNotificationAsync({
-        content: {
-          title: '🚨 Fall Detected!',
-          body: 'A fall has been detected. Please check the camera feed immediately.',
-          data: { type: 'fall_detected' },
-        },
-        trigger: null, // Send immediately
-      });
-
-      // Also show alert for immediate attention
-      Alert.alert(
-        '🚨 Fall Detected!',
-        'A fall has been detected. Please check the camera feed immediately.',
-        [
-          { text: 'OK', onPress: () => console.log('Fall alert acknowledged') }
-        ]
-      );
-    } catch (error) {
-      console.error('Error sending fall notification:', error);
-      // Fallback: just show alert if notification fails
-      Alert.alert(
-        '🚨 Fall Detected!',
-        'A fall has been detected. Please check the camera feed immediately.',
-        [
-          { text: 'OK', onPress: () => console.log('Fall alert acknowledged') }
-        ]
-      );
+    // Optional: send to a logging endpoint if configured
+    const logUrl = process.env.EXPO_PUBLIC_NOTIF_LOG_URL;
+    if (logUrl) {
+      axios
+        .post(logUrl, { expoPushToken, timestamp: new Date().toISOString() })
+        .catch((e) => console.warn('Notification log post failed (optional):', e?.message ?? e));
     }
+
+    // Local notification for immediate feedback in dev and production
+    await Notifications.scheduleNotificationAsync({
+      content: {
+        title: '🚨 Fall Detected!',
+        body: 'A fall has been detected. Please check the camera feed immediately.',
+        data: { type: 'fall_detected' },
+      },
+      trigger: null,
+    });
+
+    // Alert as an extra visible cue
+    Alert.alert(
+      '🚨 Fall Detected!',
+      'A fall has been detected. Please check the camera feed immediately.',
+      [{ text: 'OK', onPress: () => console.log('Fall alert acknowledged') }]
+    );
   };
 
   const value: NotificationContextType = {

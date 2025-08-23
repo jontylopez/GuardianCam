@@ -1,5 +1,4 @@
 const { initializeFirebase, getFirestore } = require("./config/firebase");
-const PythonModelIntegration = require("./utils/pythonModelIntegration");
 
 async function testBackendSetup() {
   console.log("🧪 Testing GuardianCam Backend Setup...\n");
@@ -11,12 +10,8 @@ async function testBackendSetup() {
     const db = getFirestore();
     console.log("✅ Firebase connection successful\n");
 
-    // Test 2: Python Model Integration
-    console.log("2. Testing Python Model Integration...");
-    const modelIntegration = new PythonModelIntegration();
-    const modelInfo = await modelIntegration.getModelInfo();
-    console.log("Model Info:", modelInfo);
-    console.log("✅ Python model integration test completed\n");
+    // Test 2: Python Model Integration (removed)
+    console.log("2. Python Model Integration no longer used (skipped)\n");
 
     // Test 3: Environment Variables
     console.log("3. Testing Environment Variables...");
@@ -75,8 +70,6 @@ async function testBackendSetup() {
       "bcryptjs",
       "jsonwebtoken",
       "express-validator",
-      "multer",
-      "uuid",
       "firebase-admin",
     ];
 
