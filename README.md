@@ -85,5 +85,47 @@ git push --force
 - Mobile “Network Error” on emulator with `npm start`: ensure backend is reachable on your LAN. Prefer `npm run start:emu` if unsure.
 - LiveKit stuck “connecting”: make sure desktop broadcaster `/livekit/broadcast` is live and LiveKit envs are set on backend.
 
+## Fresh clone checklist (what to add locally)
+
+After cloning, add these files/secrets locally (these are ignored by git):
+
+- Backend/firebase-key.json
+  - Download from Firebase Console → Project settings → Service accounts → Generate new private key
+  - Save as `Backend/firebase-key.json`
+
+- Backend/.env (create from example)
+  - Create `Backend/.env` using the following template:
+```env
+PORT=5000
+NODE_ENV=development
+
+JWT_SECRET=replace-with-a-random-string
+JWT_EXPIRES_IN=24h
+
+# CORS (comma-separated list)
+ALLOWED_ORIGINS=http://localhost:3000,http://127.0.0.1:3000
+
+# Optional for local dev convenience
+ALLOW_ANY_ORIGIN=true
+
+# LiveKit (required)
+LIVEKIT_URL=wss://<your-livekit-host>.livekit.cloud
+LIVEKIT_API_KEY=<your-livekit-api-key>
+LIVEKIT_API_SECRET=<your-livekit-api-secret>
+```
+
+- Mobile (Android) Firebase config
+  - Download from Firebase Console → Project settings → Your apps → Android → `google-services.json`
+  - Place at `Frontend-mobile/android/app/google-services.json`
+
+- Mobile (iOS) Firebase config (optional if you use iOS)
+  - Download `GoogleService-Info.plist`
+  - Place at `Frontend-mobile/ios/GuardianCamMobile/GoogleService-Info.plist`
+
+Notes:
+- Expo push tokens require an EAS project ID (already present in `Frontend-mobile/app.json`).
+- Mobile env is injected by npm scripts; you usually don’t need a `.env` in the mobile app.
+- For Android emulator, use `npm run start:emu` so the app talks to `10.0.2.2`.
+
 ## License
 MIT
