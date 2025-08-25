@@ -13,7 +13,7 @@ const LoadingScreen: React.FC<LoadingScreenProps> = ({ navigation }) => {
   useEffect(() => {
     if (!loading) {
       if (isAuthenticated) {
-        navigation.replace('Dashboard');
+        navigation.replace('Dashboard', { screen: 'LiveStream' });
       } else {
         navigation.replace('Login');
       }

@@ -46,13 +46,13 @@ const Dashboard = () => {
             </div>
             <div className="card">
               <div className="info-card">
-                <h5>🔗 WebRTC Quick Links</h5>
+                <h5>🔗 LiveKit Quick Links</h5>
                 <p>
-                  <Link to="/webrtc/broadcast">Start Broadcaster (Desktop)</Link>
+                  <Link to="/livekit/broadcast">Start Broadcaster (Desktop)</Link>
                   {' '}|{' '}
-                  <Link to="/webrtc/view">Open Viewer</Link>
+                  <Link to="/livekit/view-guest">Open Viewer</Link>
                 </p>
-                <small>Use Broadcaster on your desktop and Viewer on your phone (or inside the mobile app’s Live tab).</small>
+                <small>Use the LiveKit Broadcaster on your desktop and the LiveKit Viewer on your phone (or the mobile app’s Live tab).</small>
               </div>
             </div>
           </div>

@@ -3,6 +3,7 @@ import * as Notifications from 'expo-notifications';
 import Constants from 'expo-constants';
 import { Platform, Alert } from 'react-native';
 import axios from 'axios';
+import { useAuth } from './AuthContext';
 
 interface NotificationContextType {
   expoPushToken: string | null;
@@ -36,6 +37,7 @@ Notifications.setNotificationHandler({
 export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [expoPushToken, setExpoPushToken] = useState<string | null>(null);
   const [notification, setNotification] = useState<Notifications.Notification | null>(null);
+  const { token } = useAuth();
 
   useEffect(() => {
     registerForPushNotificationsAsync();
@@ -94,10 +96,40 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
       const { data } = await Notifications.getExpoPushTokenAsync({ projectId });
       setExpoPushToken(data);
       console.log('Expo push token:', data);
+      // actual send handled by effect when token/user ready
     } catch (error) {
       console.warn('Failed to get Expo push token (expected in Expo Go):', error);
     }
   };
+
+  // Send or update token whenever either the Expo token or auth token becomes available
+  useEffect(() => {
+    const upsert = async () => {
+      if (!expoPushToken || !token) return;
+      try {
+        let base = // @ts-ignore
+          process.env.EXPO_PUBLIC_API_BASE_URL || (Platform.OS === 'android' ? 'http://10.0.2.2:5000' : 'http://127.0.0.1:5000');
+        try {
+          const withProto = base.includes('://') ? base : `http://${base}`;
+          const parsed = new URL(withProto);
+          const host = parsed.hostname;
+          const proto = parsed.protocol || 'http:';
+          if (Platform.OS === 'android' && (host === 'localhost' || host === '127.0.0.1')) {
+            base = 'http://10.0.2.2:5000';
+          } else {
+            base = `${proto}//${host}:${parsed.port || '5000'}`;
+          }
+        } catch {}
+        await axios.post(`${base}/api/push/token`, { token: expoPushToken }, {
+          headers: { Authorization: `Bearer ${token}` },
+          timeout: 8000,
+        });
+      } catch (e) {
+        console.warn('Failed to save Expo push token:', (e as any)?.message || e);
+      }
+    };
+    upsert();
+  }, [expoPushToken, token]);
 
   const sendFallNotification = async () => {
     // Optional: send to a logging endpoint if configured

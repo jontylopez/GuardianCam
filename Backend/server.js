@@ -15,6 +15,7 @@ const userRoutes = require("./routes/users");
 const fallDetectionRoutes = require("./routes/fallDetection");
 const alertRoutes = require("./routes/alerts");
 const pushRoutes = require("./routes/push");
+const livekitRoutes = require("./routes/livekit");
 const allowAnyOrigin = process.env.ALLOW_ANY_ORIGIN === 'true';
 const allowedOrigins = process.env.ALLOWED_ORIGINS?.split(',') || ['http://localhost:3000'];
 
@@ -86,6 +87,8 @@ app.use("/api/fall-detection", authenticateToken, fallDetectionRoutes);
 app.use("/api/alerts", authenticateToken, alertRoutes);
 // Push proxy (no auth; keep simple for local testing)
 app.use("/api/push", pushRoutes);
+// LiveKit token (no auth for demo)
+app.use("/api/livekit", livekitRoutes);
 
 // Socket.IO connection handling
 // Track simple WebRTC rooms

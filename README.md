@@ -1,175 +1,89 @@
-# GuardianCam - Human Detection & Fall Detection System
+# GuardianCam
 
-## Overview
+Two apps + one API:
+- Backend (Node/Express) with Firebase Admin for auth/user data and push token storage
+- Frontend-web (React) with LiveKit viewer/broadcaster and push test panel
+- Frontend-mobile (React Native + LiveKit RN) with two tabs: Live Stream and Profile
 
-GuardianCam is a comprehensive monitoring system that combines:
-- **Frontend-based human detection** using MediaPipe (face + pose tracking)
-- **On-device fall detection in Frontend-web** using a TFLite model
-- **Real-time movement analysis** to distinguish between moving and stationary humans
+## Quick Start
 
-## Architecture
+### 0) Requirements
+- Node 18+
+- Android Studio / Xcode if building mobile
+- Firebase Admin service key (Backend/firebase-key.json) — keep out of git
 
-### Frontend (React)
-- **Human Detection**: Uses MediaPipe directly in the browser for real-time face and pose detection
-- **Movement Tracking**: Analyzes displacement of detected landmarks over time
-- **Visual Feedback**: Draws face boxes and skeleton overlays on the video feed
-- **Status Display**: Shows human presence, movement state, and fall detection results
-
-### Backend (Node.js)
-- **Auth, Users, Alerts, Push**: APIs to support mobile and web frontends (with Firebase)
-- **Sessions & Status**: Fall monitoring session bookkeeping
-
-### Python Server
-Deprecated. All fall detection is now on-device in the web frontend.
-
-## Features
-
-### Human Detection & Movement
-- **Face Detection**: MediaPipe face detection with bounding boxes
-- **Pose Estimation**: Full body skeleton tracking with 33 landmarks
-- **Movement Analysis**: Tracks displacement over time to determine motion state
-- **Stationary Detection**: Identifies when a person has been still for a configurable duration
-
-### Fall Detection
-- **Batch Processing**: Analyzes multiple frames for improved accuracy
-- **AI Models**: Uses trained neural networks for fall classification
-- **Confidence Scoring**: Provides confidence levels for detected falls
-- **Real-time Monitoring**: Continuous analysis of live video streams
-
-## Setup Instructions
-
-### 1. Install Dependencies
-
-#### Frontend
-```bash
-cd Frontend-web
-npm install
-npm install @mediapipe/face_detection @mediapipe/pose
-```
-
-#### Backend
+### 1) Backend (port 5000)
 ```bash
 cd Backend
 npm install
+npm run start   # or: npm run dev (nodemon)
 ```
+Important envs (use env file or shell):
+- LIVEKIT_URL, LIVEKIT_API_KEY, LIVEKIT_API_SECRET
+- JWT_SECRET
 
-#### Python Server
-Removed. No longer required.
-
-### 2. Start Services
-
-#### Python Server (Port 5001)
-Removed. Not needed.
-
-#### Backend Server (Port 5000)
-```bash
-cd Backend
-npm run dev
-```
-
-#### Frontend (Port 3000)
+### 2) Web (port 3000)
 ```bash
 cd Frontend-web
+npm install
 npm start
 ```
+Routes: `/dashboard`, `/livekit/broadcast`, `/livekit/view-guest`.
 
-### 3. Access the Application
-- Open `http://localhost:3000` in your browser
-- Navigate to the Live Camera view
-- Click "Start Detection" to begin monitoring
+### 3) Mobile
+```bash
+cd Frontend-mobile
+npm install
 
-## Configuration
+# Build dev client once per platform
+npm run android   # or: npm run ios
 
-### Movement Detection Thresholds
-The frontend uses configurable thresholds for movement detection:
-
-```javascript
-const movingThreshold = 5;    // pixels - above this = moving
-const stillThreshold = 2;     // pixels - below this = stationary
+# Start bundler
+npm start          # sets EXPO_PUBLIC_* to your LAN IP
+# or for Android emulator specifically
+npm run start:emu  # uses http://10.0.2.2 for backend/web
+# iOS simulator
+npm run start:ios-sim
 ```
+Live tab uses the native LiveKit SDK and also shows an “Open LiveKit in Browser” button for troubleshooting.
 
-### Stationary Time
-A person is considered "stationary" after being still for a configurable duration (currently 3 seconds).
+## Push Notifications (Expo)
+- Mobile obtains an Expo push token and saves it via `POST /api/push/token` (auth required)
+- Web `PushTest` auto-fills the token with `GET /api/push/token` and can send via `POST /api/push/send`
 
-### Fall Detection
-- **Threshold**: Configurable confidence threshold (default: 0.5)
-- **Smoothing**: EMA + consecutive frames logic
-- **Model Path**: Place `.tflite` models under `Frontend-web/public/image_model/`
+## Backend API (selected)
+- `GET /health`
+- `GET /api/push/token` → { uid, lastExpoToken, tokens }
+- `POST /api/push/token` → { ok: true }
+- `GET /api/livekit/token?room=...&identity=...&role=viewer|broadcaster` → { token, url }
 
-## API Endpoints
+## Project Scripts (summary)
+- Backend: `npm run start`, `npm run dev`
+- Web: `npm start`
+- Mobile: `npm start`, `npm run start:emu`, `npm run start:ios-sim`, `npm run android`, `npm run ios`
 
-### Fall Detection
-Handled on-device in the web frontend; no frame upload endpoints.
+## Security & Git Hygiene
+Secrets must not be committed. Repo `.gitignore` excludes:
+- Backend/firebase-key.json
+- Frontend-mobile/google-services.json and android/app/google-services.json
+- iOS GoogleService-Info.plist, Android keystores
 
-### Health Check
-- `GET /health` - Server health status
-
-## Technical Details
-
-### MediaPipe Integration
-- **Face Detection**: Model selection 1, confidence threshold 0.7
-- **Pose Estimation**: Model complexity 1, tracking confidence 0.5
-- **Performance**: Optimized for real-time processing (100ms intervals)
-
-### Movement Calculation
-- **Displacement**: Euclidean distance between consecutive landmark positions
-- **Motion Intensity**: Average displacement normalized by frame dimensions
-- **History**: Maintains 10-frame history for smooth tracking
-
-### Fall Detection Pipeline
-1. Frontend captures frames from webcam
-2. Frontend crops person ROI and runs a TFLite model locally
-3. UI shows probability and triggers alerts immediately
+If secrets were pushed previously:
+1) Remove from index and commit
+```bash
+git rm --cached Backend/firebase-key.json Frontend-mobile/google-services.json Frontend-mobile/android/app/google-services.json || true
+git commit -m "Remove secrets from repo and enforce ignore"
+```
+2) Rotate keys in their consoles (Firebase/Google Cloud → create new, revoke old)
+3) Optional history purge (destructive; push with --force):
+```bash
+npx git-filter-repo --path Backend/firebase-key.json --path Frontend-mobile/google-services.json --path Frontend-mobile/android/app/google-services.json --invert-paths
+git push --force
+```
 
 ## Troubleshooting
-
-### Common Issues
-
-1. **MediaPipe not loading**
-   - Check internet connection (CDN dependencies)
-   - Ensure browser supports WebGL
-
-2. **Camera access denied**
-   - Grant camera permissions in browser
-   - Check if camera is in use by other applications
-
-3. **Fall detection not working**
-   - Ensure `.tflite` models exist in `Frontend-web/public/image_model/`
-   - Check browser console for tfjs-tflite WASM loading
-   - Verify camera permissions and that subject is fully in frame
-
-4. **Performance issues**
-   - Reduce video resolution in `startWebcam()`
-   - Adjust detection intervals in `useEffect` hooks
-   - Check browser console for MediaPipe warnings
-
-### Performance Optimization
-- **Frame Rate**: Human detection runs at 10 FPS, fall detection at 1 FPS
-- **Resolution**: Default 640x480, can be adjusted for performance
-- **Batch Processing**: Fall detection processes multiple frames together
-- **Canvas Overlay**: Detection overlays are drawn directly on video
-
-## Development
-
-### Adding New Detection Features
-1. Extend the `humanDetection` state in `LiveCameraView.js`
-2. Add new MediaPipe processing logic in `processHumanDetection()`
-3. Update UI components to display new metrics
-4. Test with different movement patterns
-
-### Customizing Movement Thresholds
-Modify the threshold constants in `processHumanDetection()`:
-```javascript
-const movingThreshold = 5;    // Adjust for sensitivity
-const stillThreshold = 2;     // Adjust for stillness detection
-```
-
-### Model Integration
-To use your own fall detection model:
-1. Export a TFLite model (float or int8)
-2. Place it in `Frontend-web/public/image_model/`
-3. Update thresholds in `Frontend-web/src/services/HumanDetectionService.js`
+- Mobile “Network Error” on emulator with `npm start`: ensure backend is reachable on your LAN. Prefer `npm run start:emu` if unsure.
+- LiveKit stuck “connecting”: make sure desktop broadcaster `/livekit/broadcast` is live and LiveKit envs are set on backend.
 
 ## License
-
-This project is licensed under the MIT License.
+MIT

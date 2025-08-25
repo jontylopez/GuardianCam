@@ -3,7 +3,6 @@ import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { Text, View, StyleSheet } from 'react-native';
 import { useAuth } from '../contexts/AuthContext';
 import { useNotification } from '../contexts/NotificationContext';
-import DashboardTab from '../components/DashboardTab';
 import LiveStreamTab from '../components/LiveStreamTab';
 import ProfileTab from '../components/ProfileTab';
 
@@ -19,9 +18,7 @@ const DashboardScreen: React.FC = () => {
         tabBarIcon: ({ focused, color, size }) => {
           let iconName: string;
 
-          if (route.name === 'Home') {
-            iconName = focused ? 'home' : 'home-outline';
-          } else if (route.name === 'LiveStream') {
+          if (route.name === 'LiveStream') {
             iconName = focused ? 'video' : 'video-outline';
           } else if (route.name === 'Profile') {
             iconName = focused ? 'person' : 'person-outline';
@@ -42,14 +39,6 @@ const DashboardScreen: React.FC = () => {
         },
       })}
     >
-      <Tab.Screen 
-        name="Home" 
-        component={DashboardTab}
-        options={{ 
-          title: 'Home',
-          headerTitle: `Welcome, ${user?.firstName || 'User'}!`
-        }}
-      />
       <Tab.Screen 
         name="LiveStream" 
         component={LiveStreamTab}

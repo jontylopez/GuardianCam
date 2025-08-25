@@ -1,409 +1,177 @@
 import React, { useMemo, useRef, useState, useCallback, useEffect } from 'react';
-import { View, StyleSheet, Linking, TouchableOpacity, Platform, NativeModules } from 'react-native';
-import { Card, Text, Appbar, ActivityIndicator, IconButton, ProgressBar, Button } from 'react-native-paper';
+import { View, StyleSheet, Linking, Platform } from 'react-native';
+import { Card, Text, Appbar, ActivityIndicator, Button, IconButton, ProgressBar } from 'react-native-paper';
 import { WebView } from 'react-native-webview';
-// @ts-ignore
-import { RTCPeerConnection, RTCSessionDescription, RTCIceCandidate, RTCView } from 'react-native-webrtc';
-import io from 'socket.io-client';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import LiveKitRNViewer from './LiveKitRNViewer';
 import Constants from 'expo-constants';
+import axios from 'axios';
 
-// Reads from EXPO_PUBLIC_LIVE_DASHBOARD_URL if provided, otherwise defaults to localhost
+// ----------------------
+// ENV / URL RESOLUTION
+// ----------------------
 const getLiveDashboardUrl = (): string => {
   // @ts-ignore
-  const envUrl: string | undefined = process.env.EXPO_PUBLIC_LIVE_DASHBOARD_URL;
-  return envUrl ?? 'http://localhost:3000';
+  return process.env.EXPO_PUBLIC_LIVE_DASHBOARD_URL ?? 'http://localhost:3000';
 };
 
-// Resolve API base for signaling similar to AuthContext
-const resolveApiBase = (liveUrl: string): string => {
-  // 1) Explicit env
-  // @ts-ignore
-  const explicit: string | undefined = process.env.EXPO_PUBLIC_API_BASE_URL;
-  if (explicit && explicit.trim()) return explicit.trim();
+// No native HLS player in this build; using LiveKit WebView embed
 
-  // 2) Try to infer from Expo/Metro hosts
-  const candidates: Array<string | undefined> = [
-    // @ts-ignore
-    (Constants as any)?.expoConfig?.hostUri,
-    // @ts-ignore
-    (Constants as any)?.expoConfig?.developer?.hostUri,
-    // @ts-ignore
-    (Constants as any)?.manifest?.debuggerHost,
-    // @ts-ignore
-    (NativeModules as any)?.SourceCode?.scriptURL,
-    liveUrl,
-  ];
-  for (const cand of candidates) {
-    if (!cand || typeof cand !== 'string') continue;
-    try {
-      const withProto = cand.includes('://') ? cand : `http://${cand}`;
-      const parsed = new URL(withProto);
-      const host = parsed.hostname;
-      const proto = parsed.protocol || 'http:';
-      if (host && host.trim()) {
-        return `${proto}//${host}:5000`;
-      }
-    } catch {}
-  }
-
-  // 3) Platform-specific last resorts
-  if (Platform.OS === 'android') return 'http://10.0.2.2:5000';
-  return 'http://127.0.0.1:5000';
-};
-
+// ----------------------
+// MAIN COMPONENT
+// ----------------------
 const LiveStreamTab: React.FC = () => {
   const liveUrl = useMemo(() => getLiveDashboardUrl(), []);
-  const apiBaseUrl = useMemo(() => resolveApiBase(liveUrl), [liveUrl]);
   const webRef = useRef<WebView>(null);
-  const [isLoading, setIsLoading] = useState<boolean>(true);
-  const [progress, setProgress] = useState<number>(0);
-  const [hasError, setHasError] = useState<boolean>(false);
-  const [nativeViewer, setNativeViewer] = useState<boolean>(false);
-  const [status, setStatus] = useState<string>('idle');
-  const pcRef = useRef<any>(null);
-  const socketRef = useRef<any>(null);
-  const [remoteStream, setRemoteStream] = useState<any>(null);
-  const viewerUrl = useMemo(() => `${liveUrl.replace(/\/$/, '')}/webrtc/view-guest`, [liveUrl]);
 
-  const startNativeViewer = useCallback(async () => {
+  const [mode, setMode] = useState<'web' | 'native'>('native');
+  const [isLoading, setIsLoading] = useState(true);
+  const [hasError, setHasError] = useState(false);
+  const [progress, setProgress] = useState(0);
+  const [embedHtml, setEmbedHtml] = useState('');
+  const [reloadKey, setReloadKey] = useState(0);
+
+  const apiBase = useMemo(() => {
+    // @ts-ignore
+    const explicit: string | undefined = process.env.EXPO_PUBLIC_API_BASE_URL;
+    if (explicit && explicit.trim()) return explicit.trim();
+    return Platform.OS === 'android' ? 'http://10.0.2.2:5000' : 'http://127.0.0.1:5000';
+  }, []);
+
+  // Web viewer URL
+  const webViewerUrl = useMemo(() => {
     try {
-      setNativeViewer(true);
-      setStatus('connecting');
-  
-      const socket = io(apiBaseUrl, { path: '/socket.io', transports: ['websocket'] });
-      socketRef.current = socket;
-  
-      const ROOM = 'guardian-room-1';
-      socket.on('connect', () => {
-        setStatus('socket connected');
-        try {
-          socket.emit('webrtc-join', { room: ROOM, role: 'viewer' });
-          socket.emit('viewer-ready', { room: ROOM, from: socket.id });
-        } catch {}
-      });
-      socket.on('connect_error', (err: any) => {
-        try { setStatus(`socket error: ${String(err?.message || err)}`); } catch {}
-      });
-  
-      const pc: any = new RTCPeerConnection({
-        iceServers: [{ urls: 'stun:stun.l.google.com:19302' }],
-      });
-      pcRef.current = pc;
-  
-      // Receive-only video
-      try { (pc as any).addTransceiver?.('video', { direction: 'recvonly' }); } catch {}
-  
-      // Debug (optional)
-      (pc as any).onconnectionstatechange = () => setStatus(`pc: ${pc.connectionState}`);
-      (pc as any).oniceconnectionstatechange = () => {
-        if (pc.iceConnectionState === 'failed') setStatus('ice failed');
-      };
-  
-      (pc as any).onicecandidate = (e: any) => {
-        if (e?.candidate) socket.emit('webrtc-ice-candidate', { room: ROOM, candidate: e.candidate });
-      };
-  
-      // Track handler
-      (pc as any).ontrack = (ev: any) => {
-        const stream = ev?.streams?.[0];
-        if (stream) {
-          setRemoteStream(stream);
-          setIsLoading(false); // hide overlay
-        }
-      };
-      // ---- Perfect negotiation-ish guards for a viewer ----
-      let makingOffer = false;
-      let ignoreOffer = false;
-      const polite = true; // viewer is polite
-  
-  
-      // Clean old listeners before attaching
-      socket.off('webrtc-offer');
-      socket.off('webrtc-answer');
-      socket.off('webrtc-ice-candidate');
-  
-      socket.on('webrtc-offer', async ({ sdp }: any) => {
-        try {
-          if (!sdp || !sdp.type) return;
-  
-          const desc = new RTCSessionDescription(sdp);
-  
-          if (desc.type === 'answer') {
-            // We should not be getting answers on viewer; if we do, only apply
-            // when we actually have a local offer pending (have-local-offer)
-            if (pc.signalingState === 'have-local-offer') {
-              await pc.setRemoteDescription(desc);
-            } else {
-              // stray/echoed answer -> ignore
-            }
-            return;
-          }
-  
-          if (desc.type !== 'offer') return;
-  
-          setStatus('offer received');
-  
-          const readyForOffer =
-            !makingOffer &&
-            (pc.signalingState === 'stable' || pc.signalingState === 'have-local-offer');
-  
-          const offerCollision = !readyForOffer;
-  
-          ignoreOffer = !polite && offerCollision;
-          if (ignoreOffer) {
-            // impolite peer would ignore; we’re polite, so we’ll roll back
-            return;
-          }
-  
-          if (offerCollision) {
-            // Roll back our local offer and accept the remote one
-            await Promise.all([
-              pc.setLocalDescription({ type: 'rollback' } as any),
-              pc.setRemoteDescription(desc),
-            ]);
-          } else {
-            await pc.setRemoteDescription(desc);
-          }
-  
-          const answer: any = await pc.createAnswer();
-          await pc.setLocalDescription(answer as any);
-          setIsLoading(false);
-          socket.emit('webrtc-answer', { room: ROOM, sdp: answer as any });
-          setStatus('answer sent');
-        } catch (err) {
-          // Most common error here is "called in wrong state" from glare; swallow after guards
-          // console.warn('offer handler error', err);
-        }
-      });
-  
-      socket.on('webrtc-answer', async ({ sdp }: any) => {
-        try {
-          // Viewers generally shouldn't get answers, but if your server sends them,
-          // only apply when we are in have-local-offer
-          if (!sdp || sdp.type !== 'answer') return;
-          if (pc.signalingState === 'have-local-offer') {
-            await pc.setRemoteDescription(new RTCSessionDescription(sdp));
-          }
-        } catch (_) {}
-      });
-  
-      socket.on('webrtc-ice-candidate', async ({ candidate }: any) => {
-        try {
-          if (candidate) await pc.addIceCandidate(new RTCIceCandidate(candidate));
-        } catch (_) {}
-      });
-  
-      // Fallback trigger in case connect event didn't fire
-      setTimeout(() => {
-        try { socket.emit('viewer-ready', { room: ROOM, from: socket.id }); } catch {}
-      }, 1000);
-  
-    } catch (e) {
-      setStatus('error');
+      const u = new URL(liveUrl.includes('://') ? liveUrl : `http://${liveUrl}`);
+      const host = Platform.OS === 'android' && (u.hostname === 'localhost' || u.hostname === '127.0.0.1')
+        ? '10.0.2.2'
+        : u.hostname;
+      return `${u.protocol}//${host}:${u.port || '3000'}/livekit/view-guest`;
+    } catch {
+      return Platform.OS === 'android' ? 'http://10.0.2.2:3000/livekit/view-guest' : 'http://127.0.0.1:3000/livekit/view-guest';
     }
-  }, [apiBaseUrl]);
-  
+  }, [liveUrl]);
 
+  // ----------------------
+  // AUTO DETECT FALLBACK
+  // ----------------------
+  useEffect(() => {
+    // Prefer native LiveKit RN viewer
+    setMode('native');
+    setIsLoading(false);
+  }, []);
+
+  // Fetch LiveKit token and build minimal inline viewer HTML
+  // Skip inline embed; rely on the working web viewer URL for maximum compatibility in WebView
+  useEffect(() => {
+    setEmbedHtml('');
+  }, [reloadKey]);
+
+  // ----------------------
+  // BUTTON HANDLERS
+  // ----------------------
   const handleReload = useCallback(() => {
     setHasError(false);
     setProgress(0);
     setIsLoading(true);
-    if (nativeViewer) {
-      // restart native viewer
-      try {
-        if (pcRef.current) {
-          try { pcRef.current.close(); } catch {}
-          pcRef.current = null;
-        }
-        if (socketRef.current) {
-          try { socketRef.current.disconnect(); } catch {}
-          socketRef.current = null;
-        }
-      } catch {}
-      setTimeout(() => {
-        startNativeViewer();
-        setIsLoading(false);
-      }, 300);
+    if (embedHtml) {
+      setReloadKey((k) => k + 1);
     } else {
       webRef.current?.reload();
     }
-  }, [nativeViewer, startNativeViewer]);
+  }, [embedHtml]);
 
   const handleOpenExternal = useCallback(() => {
-    Linking.openURL(liveUrl).catch(() => {});
-  }, [liveUrl]);
+    Linking.openURL(webViewerUrl).catch(() => { });
+  }, [webViewerUrl]);
 
+  const switchMode = useCallback(() => {}, []);
 
-  // Simple approach default: load Viewer page in WebView; native viewer available via button
-  useEffect(() => {
-    setNativeViewer(false);
-  }, []);
-
-  const stopNativeViewer = useCallback(() => {
-    try {
-      setNativeViewer(false);
-      setStatus('idle');
-      if (pcRef.current) {
-        try { pcRef.current.close(); } catch {}
-        pcRef.current = null;
-      }
-      if (socketRef.current) {
-        try { socketRef.current.disconnect(); } catch {}
-        socketRef.current = null;
-      }
-    } catch {}
-  }, []);
-
+  // ----------------------
+  // RENDER
+  // ----------------------
   return (
-    <SafeAreaView style={styles.container}>
+    <View style={styles.container}>
       <Card style={styles.card}>
-        <Appbar.Header mode="small" style={styles.appbar}>
-          <Appbar.Content title="Live Camera" subtitle={'Native WebRTC'} />
-          <Appbar.Action icon="reload" onPress={handleReload} accessibilityLabel="Reload" />
+        <Appbar.Header style={styles.appbar}>
+          <Appbar.Content title="Live Camera" />
+          <Appbar.Action icon="reload" onPress={handleReload} />
         </Appbar.Header>
 
-        {isLoading && !hasError && (
-          <ProgressBar progress={progress} color="#667eea" style={styles.progress} />
-        )}
+        {isLoading && <ProgressBar progress={progress} color="#667eea" style={styles.progress} />}
 
         <View style={styles.content}>
-          {/* Native viewer is default; no toggle shown */}
           {hasError ? (
             <View style={styles.errorContainer}>
-              <Text style={styles.errorTitle}>Unable to load live dashboard</Text>
-              <Text style={styles.errorSubtitle}>Check your network connection or try again.</Text>
-              <IconButton icon="reload" mode="contained-tonal" size={28} onPress={handleReload} />
-              <Button mode="text" onPress={startNativeViewer}>
-                Try Native Viewer (beta)
-              </Button>
+              <Text style={styles.errorTitle}>Unable to load live feed</Text>
+              <Text style={styles.errorSubtitle}>Check network connection or try again.</Text>
+              <IconButton icon="reload" onPress={handleReload} />
+              <Button mode="text" onPress={handleOpenExternal}>Open in Browser</Button>
             </View>
           ) : (
-            <>
-              {nativeViewer ? (
-                <View style={styles.nativeBox}>
-                  {remoteStream ? (
-                    // @ts-ignore
-                    <RTCView style={styles.nativeVideo} objectFit="cover" streamURL={remoteStream && remoteStream.toURL ? remoteStream.toURL() : ''} />
-                  ) : (
-                    <Text>Native viewer: {status}</Text>
-                  )}
-                </View>
-              ) : (
-                <WebView
-                  ref={webRef}
-                  source={{ uri: viewerUrl }}
-                  style={styles.webview}
-                  javaScriptEnabled
-                  domStorageEnabled
-                  allowsInlineMediaPlayback
-                  mediaPlaybackRequiresUserAction={false}
-                  onLoadStart={() => { setIsLoading(true); setHasError(false); }}
-                  onLoadEnd={() => setIsLoading(false)}
-                  onLoadProgress={({ nativeEvent }: any) => setProgress(nativeEvent?.progress ?? 0)}
-                  onError={() => { setHasError(true); setIsLoading(false); }}
-                />
-              )}
-
-              {isLoading && (
-                <View style={styles.loadingOverlay}>
-                  <ActivityIndicator animating color="#667eea" size={36} />
-                  <Text style={styles.loadingText}>Connecting to live feed…</Text>
-                </View>
-              )}
-              {!nativeViewer && (
-                <View style={styles.toggleRow}>
-                  <Button mode="text" onPress={startNativeViewer}>Use Native (beta)</Button>
-                  <Button mode="text" onPress={handleOpenExternal}>Open in Browser</Button>
-                </View>
-              )}
-            </>
+            mode === 'native' ? (
+              <LiveKitRNViewer />
+            ) : (
+              <WebView
+                ref={webRef}
+                source={{ uri: webViewerUrl }}
+                style={styles.webview}
+                javaScriptEnabled
+                originWhitelist={['*']}
+                mixedContentMode="always"
+                allowsFullscreenVideo
+                cacheEnabled={false}
+                thirdPartyCookiesEnabled
+                incognito
+                userAgent="Mozilla/5.0 (Linux; Android 12; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36"
+                setSupportMultipleWindows={false}
+                allowsInlineMediaPlayback
+                mediaPlaybackRequiresUserAction={false}
+                onLoadStart={() => setIsLoading(true)}
+                onLoadEnd={() => setIsLoading(false)}
+                onLoadProgress={({ nativeEvent }) => setProgress(nativeEvent?.progress ?? 0)}
+                onHttpError={() => { setHasError(true); setIsLoading(false); }}
+                onError={() => { setHasError(true); setIsLoading(false); }}
+              />
+            )
           )}
+
+          {isLoading && (
+            <View style={styles.loadingOverlay}>
+              <ActivityIndicator animating color="#667eea" size={36} />
+              <Text style={styles.loadingText}>Connecting to live feed…</Text>
+            </View>
+          )}
+
+          <View style={styles.buttonRow}>
+            <Button mode="contained" onPress={handleOpenExternal} buttonColor="#667eea" textColor="#fff" style={{ flex: 1 }}>
+              Open LiveKit in Browser
+            </Button>
+          </View>
         </View>
       </Card>
-    </SafeAreaView>
+    </View>
   );
 };
 
+// ----------------------
+// STYLES
+// ----------------------
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#f5f5f5',
-  },
-  card: {
-    margin: 10,
-    elevation: 4,
-    flex: 1,
-    overflow: 'hidden',
-  },
-  appbar: {
-    backgroundColor: '#fff',
-  },
-  progress: {
-    height: 3,
-  },
-  content: {
-    flex: 1,
-    padding: 0,
-  },
-  toggleRow: {
-    flexDirection: 'row',
-    justifyContent: 'flex-end',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-  },
-  webview: {
-    flex: 1,
-  },
+  container: { flex: 1, backgroundColor: '#f6f8fb' },
+  card: { flex: 1, margin: 10, elevation: 2, backgroundColor: '#ffffff', borderRadius: 12 },
+  appbar: { backgroundColor: '#ffffff' },
+  progress: { height: 3 },
+  content: { flex: 1, position: 'relative' },
+  webview: { flex: 1 },
   loadingOverlay: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    top: 0,
-    bottom: 0,
-    alignItems: 'center',
-    justifyContent: 'center',
+    position: 'absolute', left: 0, right: 0, top: 0, bottom: 0,
+    justifyContent: 'center', alignItems: 'center',
     backgroundColor: 'rgba(0,0,0,0.05)',
   },
-  loadingText: {
-    marginTop: 10,
-    color: '#667eea',
-    fontWeight: '600',
-  },
-  nativeBox: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  nativeVideo: {
-    width: '100%',
-    height: '100%',
-    backgroundColor: '#000',
-  },
-  externalBox: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 16,
-  },
-  errorContainer: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 20,
-  },
-  errorTitle: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#333',
-    marginBottom: 6,
-  },
-  errorSubtitle: {
-    fontSize: 13,
-    color: '#666',
-    marginBottom: 8,
-    textAlign: 'center',
-  },
+  loadingText: { marginTop: 10, color: '#6366f1', fontWeight: '600' },
+  buttonRow: { flexDirection: 'row', justifyContent: 'space-around', padding: 8 },
+  errorContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 16 },
+  errorTitle: { fontSize: 16, fontWeight: 'bold', marginBottom: 6, color: '#1f2937' },
+  errorSubtitle: { fontSize: 13, color: '#6b7280', textAlign: 'center', marginBottom: 8 },
 });
 
 export default LiveStreamTab;

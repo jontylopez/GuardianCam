@@ -38,10 +38,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   // API base URL resolution: prefer explicit env; else derive from Expo/Metro hints; else platform fallbacks
   // @ts-ignore
   const API_BASE_URL: string = (() => {
-    // 1) Explicit env
+    // 1) Explicit env (validate host)
     // @ts-ignore
     const explicit: string | undefined = process.env.EXPO_PUBLIC_API_BASE_URL;
-    if (explicit && explicit.trim()) return explicit.trim();
+    if (explicit && explicit.trim()) {
+      try {
+        const withProto = explicit.includes('://') ? explicit : `http://${explicit}`;
+        const parsed = new URL(withProto);
+        if (parsed.hostname && parsed.hostname.trim()) {
+          const port = parsed.port || '5000';
+          return `${parsed.protocol}//${parsed.hostname}:${port}`;
+        }
+      } catch {}
+    }
 
     // 2) Gather host candidates from Expo/Metro
     const candidates: Array<string | undefined> = [

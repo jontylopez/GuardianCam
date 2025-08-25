@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { toast } from 'react-toastify';
 
 const DEFAULT_MESSAGE = 'Heelow From Web';
@@ -7,6 +7,26 @@ const PushTest = () => {
   const [expoToken, setExpoToken] = useState('');
   const [message, setMessage] = useState(DEFAULT_MESSAGE);
   const [sending, setSending] = useState(false);
+
+  // Autofill with user's saved Expo token if available
+  useEffect(() => {
+    const fetchToken = async () => {
+      try {
+        const res = await fetch('/api/push/token', {
+          headers: {
+            'Accept': 'application/json',
+            // authorize using stored JWT (axios sets default header, but fetch doesn't)
+            'Authorization': localStorage.getItem('token') ? `Bearer ${localStorage.getItem('token')}` : undefined,
+          },
+        });
+        if (!res.ok) return;
+        const json = await res.json();
+        const token = json?.lastExpoToken || (Array.isArray(json?.tokens) ? json.tokens[0] : undefined);
+        if (token && typeof token === 'string') setExpoToken(token);
+      } catch {}
+    };
+    fetchToken();
+  }, []);
 
   const sendPush = async () => {
     if (!expoToken || !expoToken.startsWith('ExponentPushToken')) {

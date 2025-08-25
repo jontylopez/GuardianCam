@@ -12,9 +12,9 @@ import { AuthProvider } from "./contexts/AuthContext";
 import Login from "./components/auth/Login";
 import Register from "./components/auth/Register";
 import Dashboard from "./components/dashboard/Dashboard";
-import Viewer from "./components/dashboard/Viewer";
-import Broadcaster from "./components/dashboard/Broadcaster";
 import Profile from "./components/profile/Profile";
+import LiveKitViewer from "./components/livekit/LiveKitViewer";
+import LiveKitBroadcaster from "./components/livekit/LiveKitBroadcaster";
 import ProtectedRoute from "./components/auth/ProtectedRoute";
 
 import "./App.css";
@@ -35,20 +35,12 @@ function App() {
                 </ProtectedRoute>
               }
             />
+            <Route path="/livekit/view-guest" element={<LiveKitViewer />} />
             <Route
-              path="/webrtc/view"
+              path="/livekit/broadcast"
               element={
                 <ProtectedRoute>
-                  <Viewer />
-                </ProtectedRoute>
-              }
-            />
-            <Route path="/webrtc/view-guest" element={<Viewer />} />
-            <Route
-              path="/webrtc/broadcast"
-              element={
-                <ProtectedRoute>
-                  <Broadcaster />
+                  <LiveKitBroadcaster />
                 </ProtectedRoute>
               }
             />

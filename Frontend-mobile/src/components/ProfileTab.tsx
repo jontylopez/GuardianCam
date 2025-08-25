@@ -2,9 +2,11 @@ import React, { useState } from 'react';
 import { View, StyleSheet, ScrollView, Alert } from 'react-native';
 import { Text, TextInput, Button, Card, Switch } from 'react-native-paper';
 import { useAuth } from '../contexts/AuthContext';
+import { useNavigation } from '@react-navigation/native';
 
 const ProfileTab: React.FC = () => {
   const { user, updateProfile, logout } = useAuth();
+  const navigation = useNavigation<any>();
   const [isEditing, setIsEditing] = useState(false);
   const [loading, setLoading] = useState(false);
   const [formData, setFormData] = useState({
@@ -86,7 +88,18 @@ const ProfileTab: React.FC = () => {
       'Are you sure you want to logout?',
       [
         { text: 'Cancel', style: 'cancel' },
-        { text: 'Logout', onPress: logout, style: 'destructive' },
+        { 
+          text: 'Logout', 
+          onPress: async () => {
+            try {
+              await logout();
+            } finally {
+              // Ensure we leave the authenticated navigator
+              navigation.reset({ index: 0, routes: [{ name: 'Login' }] });
+            }
+          }, 
+          style: 'destructive' 
+        },
       ]
     );
   };

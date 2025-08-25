@@ -1,6 +1,8 @@
 const express = require('express');
 const router = express.Router();
 const axios = require('axios');
+const { getFirestore } = require('../config/firebase');
+const { authenticateToken } = require('../middleware/auth');
 
 // Simple proxy to Expo Push API to avoid browser CORS
 // POST /api/push/send
@@ -35,5 +37,53 @@ router.post('/send', async (req, res) => {
 });
 
 module.exports = router;
+
+// --- Push token upsert ---
+// POST /api/push/token { token: ExponentPushToken[...] }
+// Saves token under users/{uid}/pushTokens/{token}
+router.post('/token', authenticateToken, async (req, res) => {
+  try {
+    const { token } = req.body || {};
+    if (!token || typeof token !== 'string' || !token.startsWith('ExponentPushToken')) {
+      return res.status(400).json({ error: 'Invalid or missing Expo push token' });
+    }
+    const uid = req.user?.uid;
+    if (!uid) return res.status(401).json({ error: 'Unauthorized' });
+
+    const db = getFirestore();
+    const docRef = db.collection('users').doc(uid).collection('pushTokens').doc(token);
+    await docRef.set({ token, updatedAt: new Date().toISOString(), platform: 'mobile' }, { merge: true });
+
+    // Keep a convenient field on user doc too
+    await db.collection('users').doc(uid).set({ lastExpoToken: token, lastTokenAt: new Date().toISOString() }, { merge: true });
+
+    return res.status(200).json({ ok: true });
+  } catch (e) {
+    return res.status(500).json({ error: 'Failed to save push token' });
+  }
+});
+
+// GET /api/push/token -> { uid, lastExpoToken, tokens: [ ... ] }
+router.get('/token', authenticateToken, async (req, res) => {
+  try {
+    const uid = req.user?.uid;
+    if (!uid) return res.status(401).json({ error: 'Unauthorized' });
+
+    const db = getFirestore();
+    const userDoc = await db.collection('users').doc(uid).get();
+    const lastExpoToken = userDoc.exists ? userDoc.data()?.lastExpoToken : undefined;
+
+    const tokensSnap = await db.collection('users').doc(uid).collection('pushTokens').get();
+    const tokens = [];
+    tokensSnap.forEach((d) => {
+      const t = d?.data()?.token;
+      if (typeof t === 'string') tokens.push(t);
+    });
+
+    return res.status(200).json({ uid, lastExpoToken, tokens });
+  } catch (e) {
+    return res.status(500).json({ error: 'Failed to fetch push tokens' });
+  }
+});
 
 
