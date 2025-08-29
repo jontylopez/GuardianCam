@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { toast } from 'react-toastify';
+import { pollReceipts } from '../../services/pushClient';
 
 const DEFAULT_MESSAGE = 'Heelow From Web';
 
@@ -22,7 +23,10 @@ const PushTest = () => {
         if (!res.ok) return;
         const json = await res.json();
         const token = json?.lastExpoToken || (Array.isArray(json?.tokens) ? json.tokens[0] : undefined);
-        if (token && typeof token === 'string') setExpoToken(token);
+        if (token && typeof token === 'string') {
+          setExpoToken(token);
+          try { localStorage.setItem('lastExpoToken', token); } catch {}
+        }
       } catch {}
     };
     fetchToken();
@@ -49,6 +53,8 @@ const PushTest = () => {
           body: message || DEFAULT_MESSAGE,
           data: { source: 'web-push-test' },
           sound: 'default',
+          priority: 'high',
+          channelId: 'default',
         }),
       });
 
@@ -57,6 +63,26 @@ const PushTest = () => {
         toast.success('✅ Push sent');
         // Optional: show ticket ids
         if (json?.data) console.log('Expo push response:', json.data);
+        try { localStorage.setItem('lastExpoToken', expoToken); } catch {}
+
+        // Poll receipts once after short delay
+        const ids = Array.isArray(json?.data)
+          ? json.data.map((t) => t?.id).filter(Boolean)
+          : (json?.data?.id ? [json.data.id] : []);
+        if (ids.length > 0) {
+          setTimeout(async () => {
+            const rec = await pollReceipts(ids);
+            console.log('Expo receipts:', rec);
+            if (rec?.ok && rec?.json?.data) {
+              const anyError = Object.values(rec.json.data).find((r) => r?.status === 'error');
+              if (anyError) {
+                toast.error(`❌ Receipt error: ${anyError.details?.error || anyError.message || 'unknown'}`);
+              } else {
+                toast.success('📬 Receipt OK');
+              }
+            }
+          }, 3000);
+        }
       } else {
         console.error('Expo push error:', json);
         toast.error('❌ Failed to send push');

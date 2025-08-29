@@ -25,12 +25,12 @@ export const useNotification = () => {
 // Configure notification behavior
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
-    shouldShowAlert: true,
-    shouldPlaySound: true,
-    shouldSetBadge: false,
-    // iOS specific fields to satisfy NotificationBehavior type in SDK 53+
+    // iOS (SDK 53+): prefer these instead of deprecated shouldShowAlert
     shouldShowBanner: true,
     shouldShowList: true,
+    // Cross-platform
+    shouldPlaySound: true,
+    shouldSetBadge: false,
   }),
 });
 

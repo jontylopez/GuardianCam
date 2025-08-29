@@ -1,13 +1,41 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { toast } from 'react-toastify';
 import './LiveFallDetection.css';
+import { useAudioFallDetector } from '../../audio/useAudioFallDetector';
+import { sendToLastToken } from '../../services/pushClient';
 
 const LiveFallDetection = ({ onDetectionStateChange }) => {
   const [isDetecting, setIsDetecting] = useState(false);
   const [isConnected, setIsConnected] = useState(true); // Frontend-only detection: treat as connected
 
+  const onAudioEvent = useCallback(({ help, impact, helpProb, impactProb }) => {
+    if (help || impact) {
+      const title = 'Fall sound detected';
+      const body = `help:${helpProb.toFixed(2)} impact:${impactProb.toFixed(2)}`;
+      try {
+        if (typeof Notification !== 'undefined') {
+          if (Notification.permission === 'granted') {
+            new Notification(title, { body });
+          } else if (Notification.permission !== 'denied') {
+            Notification.requestPermission().then((perm) => {
+              if (perm === 'granted') new Notification(title, { body });
+            });
+          }
+        }
+      } catch (_) {}
+      toast.warn(`🔊 ${title} (${body})`);
+      // Send mobile push
+      sendToLastToken('Fall sound detected', body, { type: 'audio_fall', helpProb, impactProb }).catch(() => {});
+    } else {
+      // For simplicity, we skip clear messages to avoid spam
+    }
+  }, []);
+
+  const audio = useAudioFallDetector({ hopSeconds: 0.5, onEvent: onAudioEvent });
+  const audioState = audio?.state || { helpProb: 0, impactProb: 0, help: false, impact: false, running: false };
+
   const startDetection = async () => {
-    // Frontend-only: no server dependency
+    try { await audio.start(); } catch (_) {}
     setIsDetecting(true);
     setIsConnected(true);
     onDetectionStateChange?.(true);
@@ -15,6 +43,7 @@ const LiveFallDetection = ({ onDetectionStateChange }) => {
   };
 
   const stopDetection = async () => {
+    try { await audio.stop(); } catch (_) {}
     setIsDetecting(false);
     setIsConnected(true);
     onDetectionStateChange?.(false);
@@ -66,6 +95,16 @@ const LiveFallDetection = ({ onDetectionStateChange }) => {
           <h4>
             {isDetecting ? '✅ Monitoring Active' : '⏸️ Detection Stopped'}
           </h4>
+          <div style={{ marginTop: 8 }}>
+            <strong>Audio:</strong> {isDetecting && audioState.running ? '🎤 Listening' : '🎤 Idle'}
+          </div>
+          <div style={{ marginTop: 4, fontFamily: 'monospace' }}>
+            helpProb: {audioState.helpProb?.toFixed?.(2) || '0.00'} | impactProb: {audioState.impactProb?.toFixed?.(2) || '0.00'}
+          </div>
+          <div style={{ marginTop: 2 }}>
+            help: <span style={{ color: audioState.help ? '#c00' : 'inherit' }}>{String(audioState.help)}</span>
+            {' '}impact: <span style={{ color: audioState.impact ? '#c00' : 'inherit' }}>{String(audioState.impact)}</span>
+          </div>
         </div>
       </div>
 

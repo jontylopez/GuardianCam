@@ -9,7 +9,7 @@ const { authenticateToken } = require('../middleware/auth');
 // Body: { to: string, title?: string, body: string, data?: object }
 router.post('/send', async (req, res) => {
   try {
-    const { to, title = 'GuardianCam', body, data } = req.body || {};
+    const { to, title = 'GuardianCam', body, data, priority, channelId, sound, ttl, badge } = req.body || {};
 
     if (!to || typeof to !== 'string' || !to.startsWith('ExponentPushToken')) {
       return res.status(400).json({ error: 'Invalid or missing Expo push token' });
@@ -18,7 +18,17 @@ router.post('/send', async (req, res) => {
       return res.status(400).json({ error: 'Missing notification body' });
     }
 
-    const payload = { to, title, body, data, sound: 'default' };
+    const payload = {
+      to,
+      title,
+      body,
+      data,
+      sound: typeof sound === 'string' ? sound : 'default',
+      priority: priority === 'normal' ? 'normal' : 'high',
+      channelId: channelId || 'default',
+      ttl: typeof ttl === 'number' ? ttl : undefined,
+      badge: typeof badge === 'number' ? badge : undefined,
+    };
 
     const expoResponse = await axios.post('https://exp.host/--/api/v2/push/send', payload, {
       headers: {
@@ -83,6 +93,32 @@ router.get('/token', authenticateToken, async (req, res) => {
     return res.status(200).json({ uid, lastExpoToken, tokens });
   } catch (e) {
     return res.status(500).json({ error: 'Failed to fetch push tokens' });
+  }
+});
+
+// --- Expo push receipts polling ---
+// POST /api/push/receipts { ids: string[] }
+// Returns receipt statuses for previously issued tickets
+router.post('/receipts', async (req, res) => {
+  try {
+    const { ids } = req.body || {};
+    if (!Array.isArray(ids) || ids.length === 0 || !ids.every(id => typeof id === 'string')) {
+      return res.status(400).json({ error: 'ids must be a non-empty string[]' });
+    }
+
+    const receiptResp = await axios.post('https://exp.host/--/api/v2/push/getReceipts', { ids }, {
+      headers: {
+        'Accept': 'application/json',
+        'Content-Type': 'application/json',
+      },
+      timeout: 10000,
+    });
+
+    return res.status(receiptResp.status).json(receiptResp.data);
+  } catch (error) {
+    const status = error?.response?.status || 500;
+    const data = error?.response?.data || { error: 'Failed to fetch push receipts' };
+    return res.status(status).json(data);
   }
 });
 

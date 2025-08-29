@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import HumanDetectionService from '../../services/HumanDetectionService';
 import { toast } from 'react-toastify';
+import { sendToLastToken } from '../../services/pushClient';
 import './LiveCameraView.css';
 
 const LiveCameraView = ({ isDetecting }) => {
@@ -8,6 +9,9 @@ const LiveCameraView = ({ isDetecting }) => {
   const canvasRef = useRef(null);
   const detectionServiceRef = useRef(null);
   const [isConnected, setIsConnected] = useState(false);
+  const FALL_HOLD_MS = 4000; // keep fall alert visible at least this long
+  const [lastFallAt, setLastFallAt] = useState(null);
+  const riskConsecRef = useRef(0);
   const [detection, setDetection] = useState({
     isHumanPresent: false,
     isMoving: false,
@@ -132,9 +136,38 @@ const LiveCameraView = ({ isDetecting }) => {
           if (results.fallDetected && !window.__gc_lastFallAlertTs) {
             window.__gc_lastFallAlertTs = Date.now();
             toast.error('🚨 Fall detected! Are you okay?', { autoClose: 8000 });
+            // Send mobile push once per episode
+            const conf = (Math.max(results.fallConfidence || 0, results.fallProb || 0) * 100).toFixed(0);
+            sendToLastToken('Fall Detected', `Confidence ~${conf}%`, { type: 'visual_fall', confidence: Number(conf) }).catch(() => {});
+            // Latch UI visibility
+            setLastFallAt(Date.now());
+          } else if (!results.fallDetected && window.__gc_lastFallAlertTs) {
+            // Optional: end-of-episode message (commented to avoid noise)
+            // sendToLastToken('Fall Monitoring', 'Status back to normal', { type: 'visual_fall_clear' }).catch(() => {});
+          }
+
+          // If classifier didn't flip to fallDetected, allow sustained high fallRisk to trigger episode
+          if (!results.fallDetected) {
+            if (results.fallRisk) {
+              riskConsecRef.current += 1; // 100ms per tick → 8 ≈ 0.8s
+              if (riskConsecRef.current >= 8 && !window.__gc_lastFallAlertTs) {
+                window.__gc_lastFallAlertTs = Date.now();
+                toast.error('🚨 Fall detected! Are you okay?', { autoClose: 8000 });
+                const conf = (Math.max(results.fallConfidence || 0, results.fallProb || 0) * 100).toFixed(0);
+                sendToLastToken('Fall Detected', `Confidence ~${conf}% (risk)`, { type: 'visual_fall_risk', confidence: Number(conf) }).catch(() => {});
+                setLastFallAt(Date.now());
+              }
+            } else {
+              riskConsecRef.current = 0;
+            }
           }
           if (!results.fallDetected) {
             window.__gc_lastFallAlertTs = null;
+            // maintain latch until hold window expires
+            setLastFallAt((prev) => {
+              if (!prev) return prev;
+              return (Date.now() - prev > FALL_HOLD_MS) ? null : prev;
+            });
           }
           
           // Update service status
@@ -250,13 +283,15 @@ const LiveCameraView = ({ isDetecting }) => {
 
   // Status helpers
   const getStatusColor = () => {
-    if (detection.fallRisk) return '#dc3545';
+    const fallActive = detection.fallDetected || (lastFallAt && (Date.now() - lastFallAt < FALL_HOLD_MS));
+    if (fallActive || detection.fallRisk) return '#dc3545';
     if (detection.isHumanPresent) return '#28a745';
     return '#6c757d';
   };
 
   const getStatusText = () => {
-    if (detection.fallDetected || detection.fallRisk) return '🚨 Fall Detected!';
+    const fallActive = detection.fallDetected || (lastFallAt && (Date.now() - lastFallAt < FALL_HOLD_MS));
+    if (fallActive || detection.fallRisk) return '🚨 Fall Detected!';
     if (detection.isHumanPresent) {
       return detection.isMoving ? '👤 Human Moving' : '👤 Human Present';
     }
@@ -264,7 +299,8 @@ const LiveCameraView = ({ isDetecting }) => {
   };
 
   const getFallRiskText = () => {
-    if (detection.fallDetected || detection.fallRisk) {
+    const fallActive = detection.fallDetected || (lastFallAt && (Date.now() - lastFallAt < FALL_HOLD_MS));
+    if (fallActive || detection.fallRisk) {
       const conf = (Math.max(detection.fallConfidence || 0, detection.fallProb || 0) * 100).toFixed(0);
       return `High (${conf}%)`;
     }

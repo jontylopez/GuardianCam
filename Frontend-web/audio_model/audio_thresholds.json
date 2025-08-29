@@ -1,0 +1,6 @@
+{
+  "help": 0.05,
+  "impact": 0.05,
+  "sr": 16000,
+  "window_samples": 32000
+}
