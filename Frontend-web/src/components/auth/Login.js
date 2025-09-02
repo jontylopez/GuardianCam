@@ -65,6 +65,7 @@ const Login = () => {
       if (success) {
         navigate("/dashboard");
       }
+      // If login fails, the error is already shown via toast in the context
     } catch (error) {
       console.error("Login error:", error);
     } finally {

@@ -126,7 +126,7 @@ const LiveCameraView = ({ isDetecting }) => {
   useEffect(() => {
     if (!isDetecting) return;
 
-    const interval = setInterval(() => {
+    const interval = setInterval(async () => {
       if (detectionServiceRef.current) {
         try {
           const results = detectionServiceRef.current.getDetectionResults();
@@ -136,9 +136,45 @@ const LiveCameraView = ({ isDetecting }) => {
           if (results.fallDetected && !window.__gc_lastFallAlertTs) {
             window.__gc_lastFallAlertTs = Date.now();
             toast.error('🚨 Fall detected! Are you okay?', { autoClose: 8000 });
+            
+            // Create fall detection alert in Firebase
+            const conf = (results.fallConfidence || results.fallProb || 0);
+            try {
+              const token = localStorage.getItem('token');
+              if (token) {
+                const response = await fetch('/api/alerts/fall-detected', {
+                  method: 'POST',
+                  headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`,
+                  },
+                  body: JSON.stringify({
+                    confidence: conf,
+                    detectionType: 'visual',
+                    description: `Visual fall detection triggered with ${(conf * 100).toFixed(1)}% confidence`,
+                    metadata: {
+                      fallConfidence: results.fallConfidence,
+                      fallProb: results.fallProb,
+                      fallRisk: results.fallRisk,
+                      timestamp: new Date().toISOString(),
+                    },
+                  }),
+                });
+                
+                if (response.ok) {
+                  const alertData = await response.json();
+                  console.log('Visual fall detection alert created:', alertData);
+                } else {
+                  console.error('Failed to create visual fall detection alert:', response.status);
+                }
+              }
+            } catch (error) {
+              console.error('Error creating visual fall detection alert:', error);
+            }
+            
             // Send mobile push once per episode
-            const conf = (Math.max(results.fallConfidence || 0, results.fallProb || 0) * 100).toFixed(0);
-            sendToLastToken('Fall Detected', `Confidence ~${conf}%`, { type: 'visual_fall', confidence: Number(conf) }).catch(() => {});
+            const confPercent = (conf * 100).toFixed(0);
+            sendToLastToken('Fall Detected', `Confidence ~${confPercent}%`, { type: 'visual_fall', confidence: Number(confPercent) }).catch(() => {});
             // Latch UI visibility
             setLastFallAt(Date.now());
           } else if (!results.fallDetected && window.__gc_lastFallAlertTs) {
@@ -153,8 +189,45 @@ const LiveCameraView = ({ isDetecting }) => {
               if (riskConsecRef.current >= 8 && !window.__gc_lastFallAlertTs) {
                 window.__gc_lastFallAlertTs = Date.now();
                 toast.error('🚨 Fall detected! Are you okay?', { autoClose: 8000 });
-                const conf = (Math.max(results.fallConfidence || 0, results.fallProb || 0) * 100).toFixed(0);
-                sendToLastToken('Fall Detected', `Confidence ~${conf}% (risk)`, { type: 'visual_fall_risk', confidence: Number(conf) }).catch(() => {});
+                
+                // Create fall detection alert in Firebase for high risk
+                const conf = (results.fallConfidence || results.fallProb || 0);
+                try {
+                  const token = localStorage.getItem('token');
+                  if (token) {
+                    const response = await fetch('/api/alerts/fall-detected', {
+                      method: 'POST',
+                      headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}`,
+                      },
+                      body: JSON.stringify({
+                        confidence: conf,
+                        detectionType: 'visual',
+                        description: `High fall risk detected with ${(conf * 100).toFixed(1)}% confidence (sustained risk)`,
+                        metadata: {
+                          fallConfidence: results.fallConfidence,
+                          fallProb: results.fallProb,
+                          fallRisk: results.fallRisk,
+                          riskConsecutive: riskConsecRef.current,
+                          timestamp: new Date().toISOString(),
+                        },
+                      }),
+                    });
+                    
+                    if (response.ok) {
+                      const alertData = await response.json();
+                      console.log('High risk fall detection alert created:', alertData);
+                    } else {
+                      console.error('Failed to create high risk fall detection alert:', response.status);
+                    }
+                  }
+                } catch (error) {
+                  console.error('Error creating high risk fall detection alert:', error);
+                }
+                
+                const confPercent = (conf * 100).toFixed(0);
+                sendToLastToken('Fall Detected', `Confidence ~${confPercent}% (risk)`, { type: 'visual_fall_risk', confidence: Number(confPercent) }).catch(() => {});
                 setLastFallAt(Date.now());
               }
             } else {

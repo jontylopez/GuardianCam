@@ -87,6 +87,98 @@
   font-size: 14px;
 }
 
+/* Enhanced permission error styling */
+.permission-error {
+  background: linear-gradient(135deg, #fff3cd 0%, #ffeaa7 100%);
+  border: 2px solid #ffc107;
+  border-radius: 12px;
+  padding: 20px;
+  margin-bottom: 20px;
+  box-shadow: 0 4px 12px rgba(255, 193, 7, 0.2);
+}
+
+.permission-error-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.permission-error-header h4 {
+  margin: 0;
+  color: #856404;
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.permission-icon {
+  font-size: 20px;
+  color: #856404;
+}
+
+.permission-error p {
+  margin: 0 0 16px 0;
+  color: #856404;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.permission-actions {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+
+.permission-actions .btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  border-radius: 8px;
+  font-weight: 500;
+  transition: all 0.2s ease;
+}
+
+.permission-actions .btn-primary {
+  background: #007bff;
+  color: white;
+  border: none;
+}
+
+.permission-actions .btn-primary:hover {
+  background: #0056b3;
+  transform: translateY(-1px);
+}
+
+.permission-actions .btn-secondary {
+  background: #6c757d;
+  color: white;
+  border: none;
+}
+
+.permission-actions .btn-secondary:hover {
+  background: #545b62;
+  transform: translateY(-1px);
+}
+
+.permission-help {
+  background: rgba(255, 255, 255, 0.7);
+  border-radius: 8px;
+  padding: 12px;
+  border-left: 4px solid #ffc107;
+}
+
+.permission-help small {
+  color: #856404;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.permission-help strong {
+  color: #5a4a00;
+}
+
 .camera-controls {
   display: flex;
   gap: 12px;

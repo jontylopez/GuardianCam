@@ -5,6 +5,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { useNotification } from '../contexts/NotificationContext';
 import LiveStreamTab from '../components/LiveStreamTab';
 import ProfileTab from '../components/ProfileTab';
+import AlertsTab from '../components/AlertsTab';
 
 const Tab = createBottomTabNavigator();
 
@@ -20,6 +21,8 @@ const DashboardScreen: React.FC = () => {
 
           if (route.name === 'LiveStream') {
             iconName = focused ? 'video' : 'video-outline';
+          } else if (route.name === 'Alerts') {
+            iconName = focused ? 'notifications' : 'notifications-none';
           } else if (route.name === 'Profile') {
             iconName = focused ? 'person' : 'person-outline';
           } else {
@@ -45,6 +48,14 @@ const DashboardScreen: React.FC = () => {
         options={{ 
           title: 'Live Stream',
           headerTitle: 'Live Camera Feed'
+        }}
+      />
+      <Tab.Screen 
+        name="Alerts" 
+        component={AlertsTab}
+        options={{ 
+          title: 'Alerts',
+          headerTitle: 'Alerts & Notifications'
         }}
       />
       <Tab.Screen 

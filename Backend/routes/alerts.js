@@ -50,6 +50,61 @@ router.get("/", async (req, res) => {
   }
 });
 
+// Bulk delete alerts - MUST be before /:alertId route
+router.delete("/bulk", async (req, res) => {
+  try {
+    const { alertIds } = req.body;
+    const userId = req.user.uid;
+    const db = getFirestore();
+
+    if (!Array.isArray(alertIds) || alertIds.length === 0) {
+      return res.status(400).json({
+        error: "Invalid request",
+        message: "alertIds must be a non-empty array",
+      });
+    }
+
+    // Verify all alerts belong to user
+    const alertsRef = db.collection("alerts");
+    const snapshot = await alertsRef.where("userId", "==", userId).get();
+
+    const userAlertIds = new Set();
+    snapshot.forEach((doc) => {
+      userAlertIds.add(doc.id);
+    });
+
+    const validAlertIds = alertIds.filter((id) => userAlertIds.has(id));
+
+    if (validAlertIds.length === 0) {
+      return res.status(400).json({
+        error: "No valid alerts found",
+        message: "No alerts found that belong to you",
+      });
+    }
+
+    // Delete all valid alerts
+    const batch = db.batch();
+    validAlertIds.forEach((alertId) => {
+      const alertRef = alertsRef.doc(alertId);
+      batch.delete(alertRef);
+    });
+
+    await batch.commit();
+
+    res.json({
+      message: `${validAlertIds.length} alerts deleted successfully`,
+      deletedCount: validAlertIds.length,
+      deletedAlertIds: validAlertIds,
+    });
+  } catch (error) {
+    console.error("Bulk delete alerts error:", error);
+    res.status(500).json({
+      error: "Failed to delete alerts",
+      message: "Internal server error",
+    });
+  }
+});
+
 // Get specific alert
 router.get("/:alertId", async (req, res) => {
   try {
@@ -226,6 +281,69 @@ router.post(
   }
 );
 
+// Create fall detection alert
+router.post(
+  "/fall-detected",
+  [
+    body("confidence").isFloat({ min: 0, max: 1 }),
+    body("detectionType").isIn(["visual", "audio", "combined"]),
+    body("location").optional().isString(),
+    body("description").optional().isString(),
+    body("metadata").optional().isObject(),
+  ],
+  async (req, res) => {
+    try {
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) {
+        return res.status(400).json({
+          error: "Validation failed",
+          details: errors.array(),
+        });
+      }
+
+      const { confidence, detectionType, location, description, metadata } = req.body;
+      const userId = req.user.uid;
+      const db = getFirestore();
+
+      const alertData = {
+        userId,
+        type: "fall_detected",
+        severity: confidence > 0.8 ? "critical" : confidence > 0.6 ? "high" : "medium",
+        message: `Fall detected with ${(confidence * 100).toFixed(1)}% confidence`,
+        location,
+        description: description || `Fall detection triggered by ${detectionType} analysis`,
+        source: "fall_detection",
+        detectionType,
+        confidence,
+        metadata: metadata || {},
+        status: "active",
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+
+      const alertRef = await db.collection("alerts").add(alertData);
+      const alertId = alertRef.id;
+
+      // Log the alert creation
+      console.log(`Fall detection alert created: ${alertId} for user ${userId} with ${(confidence * 100).toFixed(1)}% confidence`);
+
+      res.status(201).json({
+        message: "Fall detection alert created successfully",
+        alert: {
+          id: alertId,
+          ...alertData,
+        },
+      });
+    } catch (error) {
+      console.error("Create fall detection alert error:", error);
+      res.status(500).json({
+        error: "Failed to create fall detection alert",
+        message: "Internal server error",
+      });
+    }
+  }
+);
+
 // Get alert statistics
 router.get("/stats/summary", async (req, res) => {
   try {
@@ -350,6 +468,49 @@ router.post(
     }
   }
 );
+
+// Delete individual alert
+router.delete("/:alertId", async (req, res) => {
+  try {
+    const { alertId } = req.params;
+    const userId = req.user.uid;
+    const db = getFirestore();
+
+    // Get the alert document
+    const alertDoc = await db.collection("alerts").doc(alertId).get();
+
+    if (!alertDoc.exists) {
+      return res.status(404).json({
+        error: "Alert not found",
+        message: "Alert record not found",
+      });
+    }
+
+    const alertData = alertDoc.data();
+
+    // Check if user owns this alert
+    if (alertData.userId !== userId) {
+      return res.status(403).json({
+        error: "Access denied",
+        message: "You can only delete your own alerts",
+      });
+    }
+
+    // Delete the alert
+    await db.collection("alerts").doc(alertId).delete();
+
+    res.json({
+      message: "Alert deleted successfully",
+      deletedAlertId: alertId,
+    });
+  } catch (error) {
+    console.error("Delete alert error:", error);
+    res.status(500).json({
+      error: "Failed to delete alert",
+      message: "Internal server error",
+    });
+  }
+});
 
 // Get unread alerts count
 router.get("/unread/count", async (req, res) => {

@@ -10,19 +10,35 @@ const router = express.Router();
 router.post(
   "/register",
   [
-    body("email").isEmail().normalizeEmail(),
-    body("password").isLength({ min: 6 }),
-    body("firstName").notEmpty().trim(),
-    body("lastName").notEmpty().trim(),
-    body("phone").optional().isMobilePhone(),
+    body("email")
+      .isEmail()
+      .normalizeEmail()
+      .withMessage("Please provide a valid email address"),
+    body("password")
+      .isLength({ min: 6 })
+      .withMessage("Password must be at least 6 characters long"),
+    body("firstName")
+      .notEmpty()
+      .trim()
+      .withMessage("First name is required"),
+    body("lastName")
+      .notEmpty()
+      .trim()
+      .withMessage("Last name is required"),
+    body("phone")
+      .optional()
+      .isMobilePhone()
+      .withMessage("Please provide a valid phone number"),
   ],
   async (req, res) => {
     try {
       // Check validation errors
       const errors = validationResult(req);
       if (!errors.isEmpty()) {
+        const errorMessages = errors.array().map(err => err.msg);
         return res.status(400).json({
           error: "Validation failed",
+          message: errorMessages.join(", "),
           details: errors.array(),
         });
       }
@@ -35,9 +51,10 @@ router.post(
       const snapshot = await userRef.where("email", "==", email).get();
 
       if (!snapshot.empty) {
-        return res.status(400).json({
-          error: "User already exists",
-          message: "A user with this email already exists",
+        return res.status(409).json({
+          error: "Account already exists",
+          message: "An account with this email address already exists. Please try logging in instead.",
+          code: "USER_ALREADY_EXISTS"
         });
       }
 
@@ -108,14 +125,26 @@ router.post(
 // Login user
 router.post(
   "/login",
-  [body("email").isEmail().normalizeEmail(), body("password").notEmpty()],
+  [
+    body("email")
+      .isEmail()
+      .normalizeEmail()
+      .withMessage("Please provide a valid email address"),
+    body("password")
+      .notEmpty()
+      .withMessage("Password is required")
+      .isLength({ min: 6 })
+      .withMessage("Password must be at least 6 characters long"),
+  ],
   async (req, res) => {
     try {
       // Check validation errors
       const errors = validationResult(req);
       if (!errors.isEmpty()) {
+        const errorMessages = errors.array().map(err => err.msg);
         return res.status(400).json({
           error: "Validation failed",
+          message: errorMessages.join(", "),
           details: errors.array(),
         });
       }
@@ -129,8 +158,9 @@ router.post(
 
       if (snapshot.empty) {
         return res.status(401).json({
-          error: "Invalid credentials",
-          message: "Email or password is incorrect",
+          error: "Authentication failed",
+          message: "No account found with this email address. Please check your email or create a new account.",
+          code: "USER_NOT_FOUND"
         });
       }
 
@@ -140,8 +170,9 @@ router.post(
       // Check if user is active
       if (!userData.isActive) {
         return res.status(401).json({
-          error: "Account disabled",
-          message: "Your account has been disabled",
+          error: "Account suspended",
+          message: "Your account has been suspended. Please contact support for assistance.",
+          code: "ACCOUNT_SUSPENDED"
         });
       }
 
@@ -149,8 +180,9 @@ router.post(
       const isValidPassword = await bcrypt.compare(password, userData.password);
       if (!isValidPassword) {
         return res.status(401).json({
-          error: "Invalid credentials",
-          message: "Email or password is incorrect",
+          error: "Authentication failed",
+          message: "Incorrect password. Please check your password and try again.",
+          code: "INVALID_PASSWORD"
         });
       }
 

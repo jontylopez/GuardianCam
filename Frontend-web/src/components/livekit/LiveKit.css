@@ -1,0 +1,202 @@
+/* LiveKit Component Styles */
+
+/* Status Banner */
+.status-banner {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  border-radius: 8px;
+  margin-bottom: 16px;
+  font-weight: 600;
+  font-size: 14px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.status-icon {
+  font-size: 18px;
+  display: flex;
+  align-items: center;
+}
+
+.status-text {
+  flex: 1;
+}
+
+/* Network Quality Indicator */
+.network-quality {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: rgba(0, 0, 0, 0.05);
+  border-radius: 6px;
+  margin: 12px 0;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.network-quality svg {
+  font-size: 14px;
+}
+
+/* Error Display */
+.error-display {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: #f8d7da;
+  color: #721c24;
+  padding: 12px 16px;
+  border-radius: 8px;
+  margin: 12px 0;
+  font-size: 14px;
+  border: 1px solid #f5c6cb;
+}
+
+.error-display svg {
+  color: #721c24;
+  flex-shrink: 0;
+}
+
+.error-display .setup-help {
+  margin-top: 15px;
+  padding: 15px;
+  background: #f8f9fa;
+  border: 1px solid #dee2e6;
+  border-radius: 5px;
+  font-size: 14px;
+}
+
+.error-display .setup-help p {
+  margin: 0 0 10px 0;
+  color: #495057;
+}
+
+.error-display .setup-help ol {
+  margin: 0;
+  padding-left: 20px;
+  color: #6c757d;
+}
+
+.error-display .setup-help li {
+  margin-bottom: 5px;
+}
+
+.error-display .setup-help code {
+  background: #e9ecef;
+  padding: 2px 4px;
+  border-radius: 3px;
+  font-family: monospace;
+  color: #495057;
+}
+
+/* Reconnection Controls */
+.reconnection-controls {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 16px;
+  background: #f8f9fa;
+  border-radius: 8px;
+  margin: 16px 0;
+  border: 1px solid #dee2e6;
+}
+
+.reconnection-controls .btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 20px;
+  border-radius: 6px;
+  font-weight: 500;
+  transition: all 0.2s ease;
+}
+
+.reconnection-controls .btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.reconnection-controls small {
+  color: #6c757d;
+  font-size: 12px;
+}
+
+/* Status Details */
+.status-details {
+  background: #f8f9fa;
+  border-radius: 8px;
+  padding: 16px;
+  margin-top: 16px;
+  border: 1px solid #dee2e6;
+}
+
+.status-details > div {
+  margin-bottom: 8px;
+  font-size: 14px;
+}
+
+.status-details > div:last-child {
+  margin-bottom: 0;
+}
+
+.status-details strong {
+  color: #495057;
+  margin-right: 8px;
+}
+
+/* Video Container Enhancements */
+.info-card video {
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  transition: all 0.3s ease;
+}
+
+.info-card video:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.2);
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+  .status-banner {
+    flex-direction: column;
+    text-align: center;
+    gap: 8px;
+  }
+  
+  .permission-actions {
+    flex-direction: column;
+  }
+  
+  .reconnection-controls {
+    padding: 12px;
+  }
+  
+  .status-details {
+    padding: 12px;
+  }
+}
+
+/* Animation for reconnecting state */
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+.status-banner:has(.fa-redo) {
+  animation: pulse 2s infinite;
+}
+
+/* Hover effects for interactive elements */
+.reconnection-controls .btn:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+}
+
+.network-quality:hover {
+  background: rgba(0, 0, 0, 0.08);
+  transition: background 0.2s ease;
+}

@@ -1,131 +1,147 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import axios from 'axios';
 import { toast } from 'react-toastify';
+import { FaPaperPlane } from 'react-icons/fa';
 import { pollReceipts } from '../../services/pushClient';
+import { useAuth } from '../../contexts/AuthContext';
+import './PushTest.css';
 
-const DEFAULT_MESSAGE = 'Heelow From Web';
+const DEFAULT_MESSAGE = 'Hello From Web';
 
 const PushTest = () => {
-  const [expoToken, setExpoToken] = useState('');
-  const [message, setMessage] = useState(DEFAULT_MESSAGE);
-  const [sending, setSending] = useState(false);
+  const { user, token: authToken } = useAuth();
+  const [token, setToken] = useState('');
+  const [title, setTitle] = useState('GuardianCam Alert');
+  const [body, setBody] = useState(DEFAULT_MESSAGE);
+  const [loading, setLoading] = useState(false);
 
-  // Autofill with user's saved Expo token if available
+  // Load saved token when component mounts
   useEffect(() => {
-    const fetchToken = async () => {
-      try {
-        const res = await fetch('/api/push/token', {
-          headers: {
-            'Accept': 'application/json',
-            // authorize using stored JWT (axios sets default header, but fetch doesn't)
-            'Authorization': localStorage.getItem('token') ? `Bearer ${localStorage.getItem('token')}` : undefined,
-          },
-        });
-        if (!res.ok) return;
-        const json = await res.json();
-        const token = json?.lastExpoToken || (Array.isArray(json?.tokens) ? json.tokens[0] : undefined);
-        if (token && typeof token === 'string') {
-          setExpoToken(token);
-          try { localStorage.setItem('lastExpoToken', token); } catch {}
-        }
-      } catch {}
-    };
-    fetchToken();
+    loadSavedToken();
   }, []);
 
-  const sendPush = async () => {
-    if (!expoToken || !expoToken.startsWith('ExponentPushToken')) {
-      toast.error('Enter a valid Expo push token (starts with ExponentPushToken...)');
+  const loadSavedToken = async () => {
+    try {
+      const res = await fetch('/api/push/token', {
+        headers: {
+          'Accept': 'application/json',
+          'Authorization': authToken ? `Bearer ${authToken}` : undefined,
+        },
+      });
+      if (!res.ok) return;
+      const json = await res.json();
+      const savedToken = json?.lastExpoToken || (Array.isArray(json?.tokens) ? json.tokens[0] : undefined);
+      if (savedToken && typeof savedToken === 'string') {
+        setToken(savedToken);
+        try { localStorage.setItem('lastExpoToken', savedToken); } catch {}
+      }
+    } catch (error) {
+      console.error('Failed to load saved token:', error);
+    }
+  };
+
+  const sendNotification = async () => {
+    if (!token.trim()) {
+      toast.error('Please enter an Expo push token');
       return;
     }
 
+    setLoading(true);
     try {
-      setSending(true);
-      // Call backend via CRA proxy to avoid CORS issues
-      const res = await fetch('/api/push/send', {
-        method: 'POST',
-        headers: {
-          'Accept': 'application/json',
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          to: expoToken,
-          title: 'GuardianCam',
-          body: message || DEFAULT_MESSAGE,
-          data: { source: 'web-push-test' },
-          sound: 'default',
-          priority: 'high',
-          channelId: 'default',
-        }),
+      const response = await axios.post('/api/push/send', {
+        to: token.trim(),
+        title: title.trim() || 'GuardianCam Alert',
+        body: body.trim() || DEFAULT_MESSAGE,
+        sound: 'default',
+        priority: 'high',
+        channelId: 'default',
       });
 
-      const json = await res.json();
-      if (res.ok) {
-        toast.success('✅ Push sent');
-        // Optional: show ticket ids
-        if (json?.data) console.log('Expo push response:', json.data);
-        try { localStorage.setItem('lastExpoToken', expoToken); } catch {}
+      if (response.data?.data) {
+        const ticketIds = Array.isArray(response.data.data) 
+          ? response.data.data.map(t => t?.id).filter(Boolean)
+          : [response.data.data?.id].filter(Boolean);
 
-        // Poll receipts once after short delay
-        const ids = Array.isArray(json?.data)
-          ? json.data.map((t) => t?.id).filter(Boolean)
-          : (json?.data?.id ? [json.data.id] : []);
-        if (ids.length > 0) {
-          setTimeout(async () => {
-            const rec = await pollReceipts(ids);
-            console.log('Expo receipts:', rec);
-            if (rec?.ok && rec?.json?.data) {
-              const anyError = Object.values(rec.json.data).find((r) => r?.status === 'error');
-              if (anyError) {
-                toast.error(`❌ Receipt error: ${anyError.details?.error || anyError.message || 'unknown'}`);
+        if (ticketIds.length > 0) {
+          toast.success(`Notification sent! Ticket IDs: ${ticketIds.join(', ')}`);
+          
+          // Poll for receipts
+          pollReceipts(ticketIds).then(receipts => {
+            if (receipts.length > 0) {
+              const failed = receipts.filter(r => r.status === 'error');
+              if (failed.length > 0) {
+                toast.warn(`${failed.length} notification(s) failed to deliver`);
               } else {
-                toast.success('📬 Receipt OK');
+                toast.success('All notifications delivered successfully!');
               }
             }
-          }, 3000);
+          });
         }
-      } else {
-        console.error('Expo push error:', json);
-        toast.error('❌ Failed to send push');
       }
-    } catch (e) {
-      console.error(e);
-      toast.error('❌ Network error sending push');
+      
+    } catch (error) {
+      console.error('Failed to send notification:', error);
+      const message = error.response?.data?.error || 'Failed to send notification';
+      toast.error(message);
     } finally {
-      setSending(false);
+      setLoading(false);
     }
   };
 
   return (
-    <div className="info-card">
-      <h5>📲 Test Mobile Notification</h5>
-      <p>Paste your Expo push token from the mobile app and send a test notification.</p>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+    <div className="push-test">
+      <h5>🔔 Push Notification Test</h5>
+      
+      <div className="token-input">
+        <label htmlFor="expoToken">Expo Push Token:</label>
         <input
+          id="expoToken"
           type="text"
-          placeholder="ExponentPushToken[xxxxxxxxxxxxxxxxxxxxxx]"
-          value={expoToken}
-          onChange={(e) => setExpoToken(e.target.value)}
-          style={{ padding: 8, fontFamily: 'monospace' }}
+          value={token}
+          onChange={(e) => setToken(e.target.value)}
+          placeholder="ExponentPushToken[...]"
+          className="form-control"
         />
-        <input
-          type="text"
-          placeholder={DEFAULT_MESSAGE}
-          value={message}
-          onChange={(e) => setMessage(e.target.value)}
-          style={{ padding: 8 }}
-        />
-        <button className="btn btn-primary" onClick={sendPush} disabled={sending}>
-          {sending ? 'Sending…' : 'Send Notification'}
+      </div>
+
+      <div className="message-inputs">
+        <div className="input-group">
+          <label htmlFor="title">Title:</label>
+          <input
+            id="title"
+            type="text"
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            placeholder="Notification title"
+            className="form-control"
+          />
+        </div>
+        
+        <div className="input-group">
+          <label htmlFor="body">Message:</label>
+          <textarea
+            id="body"
+            value={body}
+            onChange={(e) => setBody(e.target.value)}
+            placeholder="Notification message"
+            className="form-control"
+            rows="3"
+          />
+        </div>
+      </div>
+
+      <div className="action-buttons">
+        <button
+          className="btn btn-primary"
+          onClick={sendNotification}
+          disabled={loading || !token.trim()}
+        >
+          <FaPaperPlane />
+          {loading ? 'Sending...' : 'Send Notification'}
         </button>
-        <small>
-          Tip: You need to run the mobile app as a Development Build and copy the Expo push
-          token from the device logs or UI.
-        </small>
       </div>
     </div>
   );
 };
 
 export default PushTest;
-
-

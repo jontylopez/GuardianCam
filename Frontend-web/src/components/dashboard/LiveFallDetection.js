@@ -8,10 +8,46 @@ const LiveFallDetection = ({ onDetectionStateChange }) => {
   const [isDetecting, setIsDetecting] = useState(false);
   const [isConnected, setIsConnected] = useState(true); // Frontend-only detection: treat as connected
 
-  const onAudioEvent = useCallback(({ help, impact, helpProb, impactProb }) => {
+  const onAudioEvent = useCallback(async ({ help, impact, helpProb, impactProb }) => {
     if (help || impact) {
       const title = 'Fall sound detected';
       const body = `help:${helpProb.toFixed(2)} impact:${impactProb.toFixed(2)}`;
+      
+      // Create fall detection alert in Firebase
+      try {
+        const token = localStorage.getItem('token');
+        if (token) {
+          const response = await fetch('/api/alerts/fall-detected', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${token}`,
+            },
+            body: JSON.stringify({
+              confidence: Math.max(helpProb, impactProb),
+              detectionType: 'audio',
+              description: `Audio fall detection triggered - Help probability: ${(helpProb * 100).toFixed(1)}%, Impact probability: ${(impactProb * 100).toFixed(1)}%`,
+              metadata: {
+                helpProb,
+                impactProb,
+                help,
+                impact,
+                timestamp: new Date().toISOString(),
+              },
+            }),
+          });
+          
+          if (response.ok) {
+            const alertData = await response.json();
+            console.log('Fall detection alert created:', alertData);
+          } else {
+            console.error('Failed to create fall detection alert:', response.status);
+          }
+        }
+      } catch (error) {
+        console.error('Error creating fall detection alert:', error);
+      }
+      
       try {
         if (typeof Notification !== 'undefined') {
           if (Notification.permission === 'granted') {
@@ -105,28 +141,6 @@ const LiveFallDetection = ({ onDetectionStateChange }) => {
             help: <span style={{ color: audioState.help ? '#c00' : 'inherit' }}>{String(audioState.help)}</span>
             {' '}impact: <span style={{ color: audioState.impact ? '#c00' : 'inherit' }}>{String(audioState.impact)}</span>
           </div>
-        </div>
-      </div>
-
-      <div className="detection-info">
-        <div className="info-card">
-          <h5>🎯 How It Works</h5>
-          <ul>
-            <li>Uses your webcam for real-time monitoring</li>
-            <li>On-device TFLite model classifies falls</li>
-            <li>No Python backend required</li>
-            <li>Toast alert shown on detected fall</li>
-          </ul>
-        </div>
-
-        <div className="info-card">
-          <h5>⚠️ Testing Instructions</h5>
-          <ol>
-            <li>Click "Start Detection"</li>
-            <li>Position yourself in front of the camera</li>
-            <li>Try lying down on the floor</li>
-            <li>Watch for the red fall alert</li>
-          </ol>
         </div>
       </div>
 

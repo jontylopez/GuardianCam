@@ -1,131 +1,262 @@
 # GuardianCam
 
-Two apps + one API:
-- Backend (Node/Express) with Firebase Admin for auth/user data and push token storage
-- Frontend-web (React) with LiveKit viewer/broadcaster and push test panel
-- Frontend-mobile (React Native + LiveKit RN) with two tabs: Live Stream and Profile
+A comprehensive elderly fall detection system with real-time monitoring, AI-powered detection, and multi-platform support.
+
+## System Architecture
+
+**GuardianCam** consists of three main components:
+- **Backend** (Node.js/Express) - API server with Firebase integration for authentication and data management
+- **Frontend-web** (React) - Web dashboard with LiveKit streaming and fall detection monitoring
+- **Frontend-mobile** (React Native) - Mobile app with live stream viewing and push notifications
+
+## Key Features
+
+### 🔐 **Authentication & Security**
+- JWT-based authentication with Firebase Admin
+- Secure user management and profile customization
+- Rate limiting and input validation
+
+### 📹 **Fall Detection & Monitoring**
+- AI-powered fall detection using TensorFlow models
+- Real-time video analysis with MediaPipe integration
+- Human detection and pose estimation
+- Audio-based fall detection capabilities
+
+### 🔔 **Real-time Communication**
+- LiveKit integration for video streaming
+- Socket.IO for real-time alerts
+- Push notifications via Expo
+- Instant fall detection alerts
+
+### 📱 **Multi-platform Support**
+- Responsive web dashboard
+- Native mobile app (iOS/Android)
+- Cross-platform push notifications
 
 ## Quick Start
 
-### 0) Requirements
-- Node 18+
-- Android Studio / Xcode if building mobile
-- Firebase Admin service key (Backend/firebase-key.json) — keep out of git
+### Prerequisites
+- Node.js 18+
+- Firebase project with Firestore enabled
+- LiveKit account (optional, for streaming features)
+- Android Studio / Xcode (for mobile development)
 
-### 1) Backend (port 5000)
+### 1. Backend Setup (Port 5000)
 ```bash
 cd Backend
 npm install
+cp env.example .env
+# Edit .env with your configuration
 npm run start   # or: npm run dev (nodemon)
 ```
-Important envs (use env file or shell):
-- LIVEKIT_URL, LIVEKIT_API_KEY, LIVEKIT_API_SECRET
-- JWT_SECRET
 
-### 2) Web (port 3000)
+**Required Environment Variables:**
+```env
+PORT=5000
+NODE_ENV=development
+JWT_SECRET=your-super-secret-jwt-key
+JWT_EXPIRES_IN=24h
+LIVEKIT_URL=wss://your-livekit-host.livekit.cloud
+LIVEKIT_API_KEY=your-livekit-api-key
+LIVEKIT_API_SECRET=your-livekit-api-secret
+```
+
+**Firebase Setup:**
+- Download service account key from Firebase Console
+- Save as `Backend/firebase-key.json`
+
+### 2. Web Dashboard (Port 3000)
 ```bash
 cd Frontend-web
 npm install
 npm start
 ```
-Routes: `/dashboard`, `/livekit/broadcast`, `/livekit/view-guest`.
 
-### 3) Mobile
+**Available Routes:**
+- `/dashboard` - Main monitoring dashboard
+- `/livekit/broadcast` - Camera broadcasting interface
+- `/livekit/view-guest` - Guest viewing interface
+
+### 3. Mobile App
 ```bash
 cd Frontend-mobile
 npm install
 
-# Build dev client once per platform
+# Build development client
 npm run android   # or: npm run ios
 
-# Start bundler
-npm start          # sets EXPO_PUBLIC_* to your LAN IP
-# or for Android emulator specifically
-npm run start:emu  # uses http://10.0.2.2 for backend/web
-# iOS simulator
-npm run start:ios-sim
+# Start development server
+npm start         # Sets EXPO_PUBLIC_* to your LAN IP
+npm run start:emu # For Android emulator (uses 10.0.2.2)
+npm run start:ios-sim # For iOS simulator
 ```
-Live tab uses the native LiveKit SDK and also shows an “Open LiveKit in Browser” button for troubleshooting.
 
-## Push Notifications (Expo)
-- Mobile obtains an Expo push token and saves it via `POST /api/push/token` (auth required)
-- Web `PushTest` auto-fills the token with `GET /api/push/token` and can send via `POST /api/push/send`
+## AI Models & Detection
 
-## Backend API (selected)
-- `GET /health`
-- `GET /api/push/token` → { uid, lastExpoToken, tokens }
-- `POST /api/push/token` → { ok: true }
-- `GET /api/livekit/token?room=...&identity=...&role=viewer|broadcaster` → { token, url }
+### Fall Detection Models
+- **Image-based**: `fall_cls.tflite` (15MB) and `fall_cls_int8.tflite` (4.7MB)
+- **Audio-based**: `audio_fall_multitask.tflite` (1.4MB) and `audio_fall_multitask_int8.tflite` (409KB)
+- **Performance**: 81%+ accuracy with GPU acceleration support
 
-## Project Scripts (summary)
-- Backend: `npm run start`, `npm run dev`
-- Web: `npm start`
-- Mobile: `npm start`, `npm run start:emu`, `npm run start:ios-sim`, `npm run android`, `npm run ios`
+### MediaPipe Integration
+- **Pose Detection**: Real-time human pose estimation
+- **Face Detection**: Human presence detection
+- **Drawing Utils**: Visual overlay for detection results
+
+## API Endpoints
+
+### Authentication
+- `POST /api/auth/register` - User registration
+- `POST /api/auth/login` - User login
+- `GET /api/auth/profile` - Get user profile
+- `POST /api/auth/refresh` - Refresh JWT token
+
+### User Management
+- `GET /api/users/profile` - Get user profile
+- `PUT /api/users/profile` - Update user profile
+- `PUT /api/users/preferences` - Update preferences
+- `GET /api/users/stats` - Get user statistics
+
+### Fall Detection
+- `POST /api/fall-detection/start-monitoring` - Start monitoring
+- `POST /api/fall-detection/stop-monitoring` - Stop monitoring
+- `POST /api/fall-detection/analyze-video` - Analyze video
+- `GET /api/fall-detection/monitoring-status` - Get status
+
+### Alerts & Notifications
+- `GET /api/alerts` - Get user alerts
+- `PATCH /api/alerts/:alertId` - Update alert status
+- `GET /api/push/token` - Get push token
+- `POST /api/push/token` - Save push token
+
+### LiveKit Integration
+- `GET /api/livekit/token` - Get streaming token
+
+## Project Structure
+
+```
+GuardianCam/
+├── Backend/                 # Node.js/Express API server
+│   ├── config/             # Firebase configuration
+│   ├── middleware/         # Auth and error handling
+│   ├── routes/             # API endpoints
+│   ├── utils/              # Utility functions
+│   ├── server.js           # Main server file
+│   ├── LIVEKIT_SETUP.md    # LiveKit configuration guide
+│   └── test-setup.js       # Development testing script
+├── Frontend-web/           # React web dashboard
+│   ├── src/
+│   │   ├── components/     # UI components
+│   │   ├── contexts/       # React contexts
+│   │   └── services/       # API services
+│   └── public/
+│       ├── models/         # AI model files
+│       └── mediapipe/      # MediaPipe assets
+└── Frontend-mobile/        # React Native mobile app
+    ├── src/
+    │   ├── components/     # Mobile UI components
+    │   ├── contexts/       # Mobile contexts
+    │   └── screens/        # App screens
+    └── android/ & ios/     # Native platform files
+```
+
+## Development
+
+### Testing Backend Setup
+```bash
+cd Backend
+npm run test-setup
+```
+
+### Available Scripts
+- **Backend**: `npm run start`, `npm run dev`, `npm run test-setup`
+- **Web**: `npm start`, `npm run build`
+- **Mobile**: `npm start`, `npm run android`, `npm run ios`
+
+### Adding New Features
+1. Create new route files in `Backend/routes/`
+2. Add middleware if needed in `Backend/middleware/`
+3. Update `Backend/server.js` to include new routes
+4. Add validation using express-validator
+5. Update this README with new endpoints
 
 ## Security & Git Hygiene
-Secrets must not be committed. Repo `.gitignore` excludes:
-- Backend/firebase-key.json
-- Frontend-mobile/google-services.json and android/app/google-services.json
-- iOS GoogleService-Info.plist, Android keystores
 
-If secrets were pushed previously:
-1) Remove from index and commit
+**Important**: Secrets must not be committed to the repository.
+
+**Git-ignored files:**
+- `Backend/firebase-key.json`
+- `Frontend-mobile/google-services.json`
+- `Frontend-mobile/android/app/google-services.json`
+- `Frontend-mobile/ios/GuardianCamMobile/GoogleService-Info.plist`
+- `.DS_Store` files
+
+**If secrets were previously committed:**
 ```bash
-git rm --cached Backend/firebase-key.json Frontend-mobile/google-services.json Frontend-mobile/android/app/google-services.json || true
+git rm --cached Backend/firebase-key.json Frontend-mobile/google-services.json
 git commit -m "Remove secrets from repo and enforce ignore"
-```
-2) Rotate keys in their consoles (Firebase/Google Cloud → create new, revoke old)
-3) Optional history purge (destructive; push with --force):
-```bash
-npx git-filter-repo --path Backend/firebase-key.json --path Frontend-mobile/google-services.json --path Frontend-mobile/android/app/google-services.json --invert-paths
-git push --force
+# Rotate keys in Firebase/Google Cloud consoles
 ```
 
 ## Troubleshooting
-- Mobile “Network Error” on emulator with `npm start`: ensure backend is reachable on your LAN. Prefer `npm run start:emu` if unsure.
-- LiveKit stuck “connecting”: make sure desktop broadcaster `/livekit/broadcast` is live and LiveKit envs are set on backend.
 
-## Fresh clone checklist (what to add locally)
+### Common Issues
 
-After cloning, add these files/secrets locally (these are ignored by git):
+**Mobile "Network Error" on emulator:**
+- Use `npm run start:emu` for Android emulator
+- Ensure backend is reachable on your LAN
 
-- Backend/firebase-key.json
-  - Download from Firebase Console → Project settings → Service accounts → Generate new private key
-  - Save as `Backend/firebase-key.json`
+**LiveKit connection issues:**
+- Check LiveKit environment variables in backend `.env`
+- Verify LiveKit server is accessible
+- See `Backend/LIVEKIT_SETUP.md` for detailed setup
 
-- Backend/.env (create from example)
-  - Create `Backend/.env` using the following template:
-```env
-PORT=5000
-NODE_ENV=development
+**Fall detection not working:**
+- Ensure AI models are properly loaded
+- Check GPU acceleration support
+- Verify Python model integration (if using)
 
-JWT_SECRET=replace-with-a-random-string
-JWT_EXPIRES_IN=24h
+### Debug Mode
+- Enable console logging in frontend components
+- Check backend server logs
+- Use `npm run test-setup` to verify backend configuration
 
-# CORS (comma-separated list)
-ALLOWED_ORIGINS=http://localhost:3000,http://127.0.0.1:3000
+## Fresh Clone Checklist
 
-# Optional for local dev convenience
-ALLOW_ANY_ORIGIN=true
+After cloning, add these files locally:
 
-# LiveKit (required)
-LIVEKIT_URL=wss://<your-livekit-host>.livekit.cloud
-LIVEKIT_API_KEY=<your-livekit-api-key>
-LIVEKIT_API_SECRET=<your-livekit-api-secret>
-```
+1. **Backend Firebase Key**
+   - Download from Firebase Console → Project settings → Service accounts
+   - Save as `Backend/firebase-key.json`
 
-- Mobile (Android) Firebase config
-  - Download from Firebase Console → Project settings → Your apps → Android → `google-services.json`
-  - Place at `Frontend-mobile/android/app/google-services.json`
+2. **Backend Environment**
+   - Create `Backend/.env` from `env.example`
+   - Configure JWT_SECRET, LiveKit credentials, etc.
 
-- Mobile (iOS) Firebase config (optional if you use iOS)
-  - Download `GoogleService-Info.plist`
-  - Place at `Frontend-mobile/ios/GuardianCamMobile/GoogleService-Info.plist`
+3. **Mobile Firebase Config**
+   - Download `google-services.json` for Android
+   - Download `GoogleService-Info.plist` for iOS
+   - Place in respective platform directories
 
-Notes:
-- Expo push tokens require an EAS project ID (already present in `Frontend-mobile/app.json`).
-- Mobile env is injected by npm scripts; you usually don’t need a `.env` in the mobile app.
-- For Android emulator, use `npm run start:emu` so the app talks to `10.0.2.2`.
+## Performance & Optimization
+
+- **GPU Acceleration**: Optimized for CUDA and Apple Silicon
+- **Model Optimization**: INT8 quantized models for faster inference
+- **Real-time Processing**: Efficient frame skipping and buffer management
+- **Mobile Optimization**: Native performance with React Native
+
+## Support & Contributing
+
+For issues and questions:
+1. Check the troubleshooting section above
+2. Review backend server logs
+3. Check Firebase console for database issues
+4. Verify environment variables are set correctly
 
 ## License
-MIT
+
+MIT License - see LICENSE file for details.
+
+---
+
+**GuardianCam** - Protecting your loved ones with AI-powered fall detection technology. 🛡️

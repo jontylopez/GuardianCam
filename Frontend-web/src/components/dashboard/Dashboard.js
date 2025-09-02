@@ -2,8 +2,9 @@ import React, { useState } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import Navbar from '../layout/Navbar';
 import LiveFallDetection from './LiveFallDetection';
-import PushTest from './PushTest';
 import LiveCameraView from './LiveCameraView';
+import PushTest from './PushTest';
+import AlertsCard from './AlertsCard';
 import './Dashboard.css';
 import { Link } from 'react-router-dom';
 
@@ -31,16 +32,19 @@ const Dashboard = () => {
         </div>
 
         <div className="dashboard-content">
-          <div className="main-section">
+          <div className="camera-section">
             <div className="card">
               <LiveFallDetection onDetectionStateChange={handleDetectionStateChange} />
             </div>
             <div className="card">
               <LiveCameraView isDetecting={isDetecting} />
             </div>
+            <div className="card">
+              <AlertsCard />
+            </div>
           </div>
           
-          <div className="camera-section">
+          <div className="side-section">
             <div className="card">
               <PushTest />
             </div>
@@ -52,7 +56,7 @@ const Dashboard = () => {
                   {' '}|{' '}
                   <Link to="/livekit/view-guest">Open Viewer</Link>
                 </p>
-                <small>Use the LiveKit Broadcaster on your desktop and the LiveKit Viewer on your phone (or the mobile app’s Live tab).</small>
+                <small>Use the LiveKit Broadcaster on your desktop and the LiveKit Viewer on your phone (or the mobile app's Live tab).</small>
               </div>
             </div>
           </div>

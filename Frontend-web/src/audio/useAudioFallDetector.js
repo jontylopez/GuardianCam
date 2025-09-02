@@ -37,17 +37,27 @@ export function useAudioFallDetector(options) {
   const ensureBackendsAndModel = useCallback(async () => {
     if (modelRef.current && thresholdsRef.current) return;
 
-    // Ensure TFJS WASM backend finds its binaries
     try {
+      // Ensure TFJS WASM backend finds its binaries
       setTfjsWasmPaths('https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-backend-wasm@4.17.0/dist/');
-    } catch (_) {}
-    await tf.setBackend('wasm');
-    await tf.ready();
+      await tf.setBackend('wasm');
+      await tf.ready();
+    } catch (error) {
+      console.error('Failed to initialize TensorFlow.js WASM backend:', error);
+      // Fallback to CPU backend
+      await tf.setBackend('cpu');
+      await tf.ready();
+    }
 
     // Point tfjs-tflite to a CDN for its wasm files
-    try {
-      tflite.setWasmPath('https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-tflite@0.0.1-alpha.10/dist/');
-    } catch (_) {}
+    if (tflite && typeof tflite.setWasmPath === 'function') {
+      try {
+        tflite.setWasmPath('https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-tflite@0.0.1-alpha.10/dist/');
+      } catch (_) {}
+    } else {
+      console.warn('TFLite not available, audio fall detection will be disabled');
+      return;
+    }
 
     if (!thresholdsRef.current) {
       const resp = await fetch('/models/audio_thresholds.json');
@@ -57,18 +67,23 @@ export function useAudioFallDetector(options) {
     }
 
     if (!modelRef.current) {
-      const preferFloat = options?.forceFloatModel === true;
-      if (!preferFloat) {
-        try {
-          modelRef.current = await tflite.loadTFLiteModel('/models/audio_fall_multitask_int8.tflite');
-        } catch (err) {
-          console.warn('Failed to load int8 model; falling back to float model', err);
+      try {
+        const preferFloat = options?.forceFloatModel === true;
+        if (!preferFloat) {
+          try {
+            modelRef.current = await tflite.loadTFLiteModel('/models/audio_fall_multitask_int8.tflite');
+          } catch (err) {
+            console.warn('Failed to load int8 model; falling back to float model', err);
+            modelRef.current = await tflite.loadTFLiteModel('/models/audio_fall_multitask.tflite');
+            switchedToFloatRef.current = true;
+          }
+        } else {
           modelRef.current = await tflite.loadTFLiteModel('/models/audio_fall_multitask.tflite');
           switchedToFloatRef.current = true;
         }
-      } else {
-        modelRef.current = await tflite.loadTFLiteModel('/models/audio_fall_multitask.tflite');
-        switchedToFloatRef.current = true;
+      } catch (error) {
+        console.error('Failed to load TFLite model:', error);
+        throw new Error('Audio fall detection model could not be loaded. Please check your internet connection and try again.');
       }
     }
   }, [options?.forceFloatModel]);

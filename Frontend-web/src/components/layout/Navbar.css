@@ -7,7 +7,6 @@
 }
 
 .navbar-container {
-  max-width: 1400px;
   margin: 0 auto;
   padding: 0 20px;
   display: flex;
@@ -235,7 +234,7 @@
 /* Responsive design */
 @media (max-width: 768px) {
   .navbar-container {
-    padding: 0 16px;
+    padding: 0 20px;
   }
   
   .navbar-menu {
@@ -315,7 +314,7 @@
 
 @media (max-width: 480px) {
   .navbar-container {
-    padding: 0 12px;
+    padding: 0 20px;
     height: 60px;
   }
   

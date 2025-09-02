@@ -11,6 +11,7 @@ interface User {
   email: string;
   phone: string;
   role: string;
+  uid?: string; // For backward compatibility
 }
 
 interface AuthContextType {
@@ -155,12 +156,33 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       return true;
     } catch (error: any) {
       let message = 'Login failed';
-      if (error?.response?.data?.message) {
-        message = error.response.data.message;
+      let title = 'Error';
+      
+      if (error?.response?.data) {
+        const errorData = error.response.data;
+        message = errorData.message || 'Login failed';
+        
+        // Handle specific error codes
+        switch (errorData.code) {
+          case 'USER_NOT_FOUND':
+            title = 'Account Not Found';
+            message = 'No account found with this email. Please check your email or create a new account.';
+            break;
+          case 'INVALID_PASSWORD':
+            title = 'Incorrect Password';
+            message = 'The password you entered is incorrect. Please try again.';
+            break;
+          case 'ACCOUNT_SUSPENDED':
+            title = 'Account Suspended';
+            message = 'Your account has been suspended. Please contact support for assistance.';
+            break;
+        }
       } else if (error?.request && !error?.response) {
-        message = `Network error: cannot reach ${API_BASE_URL}`;
+        title = 'Network Error';
+        message = `Cannot connect to server. Please check your internet connection.`;
       }
-      Alert.alert('Error', message);
+      
+      Alert.alert(title, message);
       return false;
     }
   };
@@ -181,8 +203,29 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       Alert.alert('Success', 'Registration successful!');
       return true;
     } catch (error: any) {
-      const message = error.response?.data?.message || 'Registration failed';
-      Alert.alert('Error', message);
+      let message = 'Registration failed';
+      let title = 'Error';
+      
+      if (error?.response?.data) {
+        const errorData = error.response.data;
+        message = errorData.message || 'Registration failed';
+        
+        // Handle specific error codes
+        switch (errorData.code) {
+          case 'USER_ALREADY_EXISTS':
+            title = 'Account Already Exists';
+            message = 'An account with this email already exists. Please try logging in instead.';
+            break;
+        }
+        
+        // Handle specific HTTP status codes
+        if (error.response.status === 400) {
+          title = 'Invalid Input';
+          message = errorData.message || 'Please check your input and try again.';
+        }
+      }
+      
+      Alert.alert(title, message);
       return false;
     }
   };
