@@ -139,6 +139,92 @@ const PushTest = () => {
           <FaPaperPlane />
           {loading ? 'Sending...' : 'Send Notification'}
         </button>
+        
+        <button
+          className="btn btn-secondary"
+          onClick={() => {
+            // Test the sendToLastToken function
+            console.log('🧪 Testing sendToLastToken...');
+            import('../../services/pushClient').then(({ sendToLastToken }) => {
+              sendToLastToken('Test from Web', 'This is a test notification from web app', { test: true })
+                .then(result => {
+                  console.log('🧪 sendToLastToken result:', result);
+                  if (result.ok) {
+                    toast.success('Test notification sent successfully!');
+                  } else {
+                    toast.error(`Test failed: ${result.error}`);
+                  }
+                })
+                .catch(error => {
+                  console.error('🧪 sendToLastToken error:', error);
+                  toast.error(`Test error: ${error.message}`);
+                });
+            });
+          }}
+          style={{ marginLeft: '10px' }}
+        >
+          🧪 Test Auto Token
+        </button>
+        
+        <button
+          className="btn btn-info"
+          onClick={() => {
+            // Save current token to localStorage for testing
+            if (token.trim()) {
+              localStorage.setItem('lastExpoToken', token.trim());
+              toast.success('Token saved to localStorage for testing!');
+              console.log('📱 Token saved to localStorage:', token.substring(0, 20) + '...');
+            } else {
+              toast.error('Please enter a token first');
+            }
+          }}
+          style={{ marginLeft: '10px' }}
+        >
+          💾 Save Token
+        </button>
+        
+        <button
+          className="btn btn-warning"
+          onClick={async () => {
+            // Get token from backend
+            try {
+              const res = await fetch('/api/push/token', {
+                headers: {
+                  'Accept': 'application/json',
+                  'Authorization': authToken ? `Bearer ${authToken}` : undefined,
+                },
+              });
+              if (res.ok) {
+                const json = await res.json();
+                const backendToken = json?.lastExpoToken || (Array.isArray(json?.tokens) ? json.tokens[0] : null);
+                if (backendToken) {
+                  setToken(backendToken);
+                  localStorage.setItem('lastExpoToken', backendToken);
+                  toast.success('Token loaded from backend!');
+                  console.log('📱 Token loaded from backend:', backendToken.substring(0, 20) + '...');
+                } else {
+                  toast.error('No token found in backend');
+                }
+              } else {
+                toast.error('Failed to load token from backend');
+              }
+            } catch (error) {
+              console.error('Error loading token:', error);
+              toast.error('Error loading token from backend');
+            }
+          }}
+          style={{ marginLeft: '10px' }}
+        >
+          🔄 Load from Backend
+        </button>
+      </div>
+      
+      <div className="debug-info" style={{ marginTop: '15px', fontSize: '12px', color: '#666' }}>
+        <p><strong>Debug Info:</strong></p>
+        <p>• Token loaded: {token ? 'Yes' : 'No'}</p>
+        <p>• Token length: {token?.length || 0}</p>
+        <p>• Auth token: {authToken ? 'Yes' : 'No'}</p>
+        <p>• Local storage token: {localStorage.getItem('lastExpoToken') ? 'Yes' : 'No'}</p>
       </div>
     </div>
   );

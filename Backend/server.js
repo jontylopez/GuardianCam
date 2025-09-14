@@ -17,7 +17,7 @@ const alertRoutes = require("./routes/alerts");
 const pushRoutes = require("./routes/push");
 const livekitRoutes = require("./routes/livekit");
 const allowAnyOrigin = process.env.ALLOW_ANY_ORIGIN === 'true';
-const allowedOrigins = process.env.ALLOWED_ORIGINS?.split(',') || ['http://localhost:3000'];
+const allowedOrigins = process.env.ALLOWED_ORIGINS?.split(',') || ['http://localhost:3000', 'http://192.168.1.97:3000'];
 
 // Import middleware
 const { errorHandler } = require("./middleware/errorHandler");
@@ -60,6 +60,7 @@ app.use(
   cors({
     origin: process.env.ALLOWED_ORIGINS?.split(",") || [
       "http://localhost:3000",
+      "http://192.168.1.97:3000",
     ],
     credentials: true,
   })
@@ -77,6 +78,9 @@ app.get("/health", (req, res) => {
     status: "OK",
     message: "GuardianCam Backend is running",
     timestamp: new Date().toISOString(),
+    allowedOrigins: allowedOrigins,
+    clientIP: req.ip,
+    userAgent: req.get('User-Agent'),
   });
 });
 

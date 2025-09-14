@@ -95,7 +95,7 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
 
       const { data } = await Notifications.getExpoPushTokenAsync({ projectId });
       setExpoPushToken(data);
-      console.log('Expo push token:', data);
+      console.log('📱 Expo push token obtained:', data);
       // actual send handled by effect when token/user ready
     } catch (error) {
       console.warn('Failed to get Expo push token (expected in Expo Go):', error);
@@ -108,22 +108,29 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
       if (!expoPushToken || !token) return;
       try {
         let base = // @ts-ignore
-          process.env.EXPO_PUBLIC_API_BASE_URL || (Platform.OS === 'android' ? 'http://10.0.2.2:5000' : 'http://127.0.0.1:5000');
+          process.env.EXPO_PUBLIC_API_BASE_URL || 'http://192.168.1.97:5000';
         try {
           const withProto = base.includes('://') ? base : `http://${base}`;
           const parsed = new URL(withProto);
           const host = parsed.hostname;
           const proto = parsed.protocol || 'http:';
-          if (Platform.OS === 'android' && (host === 'localhost' || host === '127.0.0.1')) {
-            base = 'http://10.0.2.2:5000';
+          // Use the actual IP address instead of localhost/127.0.0.1
+          if (host === 'localhost' || host === '127.0.0.1') {
+            base = 'http://192.168.1.97:5000';
           } else {
             base = `${proto}//${host}:${parsed.port || '5000'}`;
           }
         } catch {}
-        await axios.post(`${base}/api/push/token`, { token: expoPushToken }, {
+        console.log('📱 Registering push token with backend...', { 
+          base, 
+          tokenLength: expoPushToken?.length,
+          hasAuthToken: !!token 
+        });
+        const response = await axios.post(`${base}/api/push/token`, { token: expoPushToken }, {
           headers: { Authorization: `Bearer ${token}` },
           timeout: 8000,
         });
+        console.log('📱 Push token registration response:', response.data);
       } catch (e) {
         console.warn('Failed to save Expo push token:', (e as any)?.message || e);
       }
@@ -132,6 +139,8 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
   }, [expoPushToken, token]);
 
   const sendFallNotification = async () => {
+    console.log('📱 sendFallNotification called');
+    
     // Optional: send to a logging endpoint if configured
     const logUrl = process.env.EXPO_PUBLIC_NOTIF_LOG_URL;
     if (logUrl) {
@@ -141,6 +150,7 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
     }
 
     // Local notification for immediate feedback in dev and production
+    console.log('📱 Scheduling local notification...');
     await Notifications.scheduleNotificationAsync({
       content: {
         title: '🚨 Fall Detected!',
@@ -151,6 +161,7 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
     });
 
     // Alert as an extra visible cue
+    console.log('📱 Showing alert dialog...');
     Alert.alert(
       '🚨 Fall Detected!',
       'A fall has been detected. Please check the camera feed immediately.',

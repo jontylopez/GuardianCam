@@ -73,6 +73,67 @@ const LiveCameraView = ({ isDetecting }) => {
       try {
         detectionServiceRef.current = new HumanDetectionService();
         
+        // Set up fall detection callback
+        detectionServiceRef.current.setFallDetectionCallback(async (fallData) => {
+          console.log('🚨 Fall detection callback triggered:', fallData);
+          
+          // Trigger fall alert toast
+          toast.error('🚨 Fall detected! Are you okay?', { autoClose: 8000 });
+          
+          // Create fall detection alert in Firebase
+          try {
+            const token = localStorage.getItem('token');
+            console.log('🚨 Creating Firebase alert...', { hasToken: !!token });
+            if (token) {
+              const response = await fetch('/api/alerts/fall-detected', {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  'Authorization': `Bearer ${token}`,
+                },
+                body: JSON.stringify({
+                  confidence: fallData.confidence,
+                  detectionType: 'visual',
+                  description: `Visual fall detection triggered with ${(fallData.confidence * 100).toFixed(1)}% confidence`,
+                  metadata: {
+                    ...fallData.metadata,
+                    fallProb: fallData.fallProb,
+                    timestamp: fallData.timestamp,
+                  },
+                }),
+              });
+              
+              console.log('🚨 Firebase alert response:', { status: response.status, ok: response.ok });
+              if (response.ok) {
+                const alertData = await response.json();
+                console.log('🚨 Visual fall detection alert created:', alertData);
+              } else {
+                const errorText = await response.text();
+                console.error('🚨 Failed to create visual fall detection alert:', response.status, errorText);
+              }
+            } else {
+              console.warn('🚨 No auth token found, skipping Firebase alert creation');
+            }
+          } catch (error) {
+            console.error('🚨 Error creating visual fall detection alert:', error);
+          }
+          
+          // Send mobile push notification
+          const confPercent = (fallData.confidence * 100).toFixed(0);
+          console.log('🚨 Sending push notification...', { confPercent });
+          sendToLastToken('Fall Detected', `Confidence ~${confPercent}%`, { 
+            type: 'visual_fall', 
+            confidence: Number(confPercent) 
+          }).then(result => {
+            console.log('🚨 Push notification result:', result);
+          }).catch(error => {
+            console.error('🚨 Push notification error:', error);
+          });
+          
+          // Latch UI visibility
+          setLastFallAt(Date.now());
+        });
+        
         // Initialize the service first
         console.log('Initializing human detection service...');
         const initialized = await detectionServiceRef.current.initialize();
@@ -354,6 +415,27 @@ const LiveCameraView = ({ isDetecting }) => {
     setErrors([]);
   };
 
+  // Test function to manually trigger fall detection
+  const testFallDetection = () => {
+    if (detectionServiceRef.current && detectionServiceRef.current.onFallDetected) {
+      console.log('🧪 Testing fall detection manually...');
+      detectionServiceRef.current.onFallDetected({
+        type: 'test_fall',
+        confidence: 0.85,
+        fallProb: 0.85,
+        timestamp: new Date().toISOString(),
+        metadata: {
+          effThreshold: 0.15,
+          consecutiveFrames: 3,
+          adaptiveActive: false,
+          test: true
+        }
+      });
+    } else {
+      console.warn('🧪 No fall detection callback available for testing');
+    }
+  };
+
   // Status helpers
   const getStatusColor = () => {
     const fallActive = detection.fallDetected || (lastFallAt && (Date.now() - lastFallAt < FALL_HOLD_MS));
@@ -511,6 +593,22 @@ const LiveCameraView = ({ isDetecting }) => {
               Errors: {errors.length} | 
               Last Update: {new Date().toLocaleTimeString()}
             </small>
+            <button 
+              className="test-fall-button"
+              onClick={testFallDetection}
+              style={{
+                marginTop: '8px',
+                padding: '4px 8px',
+                backgroundColor: '#ff6b6b',
+                color: 'white',
+                border: 'none',
+                borderRadius: '4px',
+                cursor: 'pointer',
+                fontSize: '12px'
+              }}
+            >
+              🧪 Test Fall Detection
+            </button>
           </div>
         </div>
       )}

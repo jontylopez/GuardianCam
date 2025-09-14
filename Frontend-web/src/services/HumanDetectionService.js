@@ -20,6 +20,7 @@ class HumanDetectionService {
     this.lastPoseResults = null;
     this.lastFaceResults = null;
     this.faceDetectionEnabled = true; // Flag to control face detection
+    this.onFallDetected = null; // Callback for fall detection events
     
     // Throttling for drawing operations
     this.lastDrawTime = 0;
@@ -56,18 +57,25 @@ class HumanDetectionService {
     this.fallRunner = null;
     this.fallProb = 0;
     this.fallDetected = false;
-    this.fallThreshold = 0.50; // base threshold
+    this.fallThreshold = 0.25; // Even lower base threshold for testing
     this._fallBuffer = [];
-    this._fallWindow = 12;
-    this._fallK = 6;
+    this._fallWindow = 6; // Even smaller window for faster detection
+    this._fallK = 3; // Even fewer consecutive frames needed
     this._fallEma = 0; // EMA smoothing of fall prob
-    this._fallEmaAlpha = 0.30;
+    this._fallEmaAlpha = 0.50; // More responsive smoothing
     this._roiCanvas = null; // offscreen ROI canvas
     this._adaptiveBoostUntil = 0; // timestamp until which threshold is lowered
+    this._lastNotificationTime = 0; // Prevent notification spam
+    this._notificationCooldown = 5000; // 5 second cooldown between notifications
   }
 
   // Smooth value a<-EMA(a, x)
   ema(prev, x, alpha) { return prev == null ? x : (alpha * x + (1 - alpha) * prev); }
+
+  // Set callback for fall detection events
+  setFallDetectionCallback(callback) {
+    this.onFallDetected = callback;
+  }
 
   // Helper distance in normalized image space
   distance2D(a, b) {
@@ -479,7 +487,22 @@ class HumanDetectionService {
 
       // Adaptive thresholding window
       const adaptiveActive = now < this._adaptiveBoostUntil;
-      const effThreshold = Math.max(0.30, this.fallThreshold - (adaptiveActive ? 0.15 : 0));
+      const effThreshold = Math.max(0.15, this.fallThreshold - (adaptiveActive ? 0.15 : 0));
+
+      // Debug logging every 2 seconds
+      if (!this._lastDebugLog || now - this._lastDebugLog > 2000) {
+        console.log('🔍 Fall Detection Debug:', {
+          fallProb: this.fallProb?.toFixed(3),
+          smoothed: smoothed?.toFixed(3),
+          meanSmoothed: meanSmoothed?.toFixed(3),
+          bufferLength: this._fallBuffer.length,
+          consecutiveFrames: this._fallConsec,
+          effThreshold: effThreshold?.toFixed(3),
+          detected: (this._fallConsec || 0) >= this._fallK,
+          hasCallback: !!this.onFallDetected
+        });
+        this._lastDebugLog = now;
+      }
 
       if (meanSmoothed >= effThreshold) {
         this._fallConsec = (this._fallConsec || 0) + 1;
@@ -487,7 +510,41 @@ class HumanDetectionService {
         this._fallConsec = 0;
       }
       const detected = (this._fallConsec || 0) >= this._fallK;
+      const wasDetected = this.fallDetected;
       this.fallDetected = detected;
+
+      // Trigger notification on new fall detection (with cooldown)
+      if (detected && !wasDetected && this.onFallDetected) {
+        const now = Date.now();
+        console.log('🚨 FALL DETECTED!', {
+          detected,
+          wasDetected,
+          hasCallback: !!this.onFallDetected,
+          meanSmoothed,
+          effThreshold,
+          consecutiveFrames: this._fallConsec,
+          timeSinceLastNotification: now - this._lastNotificationTime,
+          cooldown: this._notificationCooldown
+        });
+        
+        if (now - this._lastNotificationTime > this._notificationCooldown) {
+          this._lastNotificationTime = now;
+          console.log('🚨 Triggering fall detection callback...');
+          this.onFallDetected({
+            type: 'visual_fall',
+            confidence: meanSmoothed,
+            fallProb: this.fallProb,
+            timestamp: new Date().toISOString(),
+            metadata: {
+              effThreshold,
+              consecutiveFrames: this._fallConsec,
+              adaptiveActive
+            }
+          });
+        } else {
+          console.log('🚨 Fall detected but in cooldown period');
+        }
+      }
 
       // Map into movementAnalysis for UI consumption
       this.movementAnalysis.fallRisk = this.fallDetected || this.movementAnalysis.fallRisk;

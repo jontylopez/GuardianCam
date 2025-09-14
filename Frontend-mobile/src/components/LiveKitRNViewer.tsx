@@ -31,17 +31,15 @@ const LiveKitRNViewer: React.FC<Props> = ({
         const parsed = new URL(withProto);
         const host = parsed.hostname;
         const proto = parsed.protocol || 'http:';
-        if (Platform.OS === 'android') {
-          // Prefer 10.0.2.2 for emulator when host is localhost/LAN
-          if (host === 'localhost' || host === '127.0.0.1' || /^10\.|^192\.168\.|^172\.(1[6-9]|2[0-9]|3[0-1])\./.test(host)) {
-            return 'http://10.0.2.2:5000';
-          }
+        // Use actual IP address instead of localhost/127.0.0.1
+        if (host === 'localhost' || host === '127.0.0.1') {
+          return 'http://192.168.1.97:5000';
         }
         const port = parsed.port || '5000';
         return `${proto}//${host}:${port}`;
       } catch {}
     }
-    return Platform.OS === 'android' ? 'http://10.0.2.2:5000' : 'http://127.0.0.1:5000';
+    return 'http://192.168.1.97:5000';
   }, [apiBaseUrl]);
 
   const room = roomName || ROOM_NAME_DEFAULT;

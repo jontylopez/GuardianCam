@@ -77,9 +77,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       } catch {}
     }
 
-    // 3) Platform-specific last resorts
-    if (Platform.OS === 'android') return 'http://10.0.2.2:5000';
-    return 'http://127.0.0.1:5000';
+    // 3) Platform-specific last resorts - use actual IP address
+    return 'http://192.168.1.97:5000';
   })();
   const [user, setUser] = useState<User | null>(null);
   const [token, setToken] = useState<string | null>(null);

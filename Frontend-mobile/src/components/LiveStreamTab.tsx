@@ -34,19 +34,19 @@ const LiveStreamTab: React.FC = () => {
     // @ts-ignore
     const explicit: string | undefined = process.env.EXPO_PUBLIC_API_BASE_URL;
     if (explicit && explicit.trim()) return explicit.trim();
-    return Platform.OS === 'android' ? 'http://10.0.2.2:5000' : 'http://127.0.0.1:5000';
+    return 'http://192.168.1.97:5000';
   }, []);
 
   // Web viewer URL
   const webViewerUrl = useMemo(() => {
     try {
       const u = new URL(liveUrl.includes('://') ? liveUrl : `http://${liveUrl}`);
-      const host = Platform.OS === 'android' && (u.hostname === 'localhost' || u.hostname === '127.0.0.1')
-        ? '10.0.2.2'
+      const host = (u.hostname === 'localhost' || u.hostname === '127.0.0.1')
+        ? '192.168.1.97'
         : u.hostname;
       return `${u.protocol}//${host}:${u.port || '3000'}/livekit/view-guest`;
     } catch {
-      return Platform.OS === 'android' ? 'http://10.0.2.2:3000/livekit/view-guest' : 'http://127.0.0.1:3000/livekit/view-guest';
+      return 'http://192.168.1.97:3000/livekit/view-guest';
     }
   }, [liveUrl]);
 

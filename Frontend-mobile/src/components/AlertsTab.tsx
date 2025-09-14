@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 import { Alert } from 'react-native';
 import { useAuth } from '../contexts/AuthContext';
+import { useNotification } from '../contexts/NotificationContext';
 import axios from 'axios';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 
@@ -28,6 +29,7 @@ interface AlertItem {
 
 const AlertsTab: React.FC = () => {
   const { user, token } = useAuth();
+  const { sendFallNotification, expoPushToken } = useNotification();
   const [alerts, setAlerts] = useState<AlertItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -51,8 +53,8 @@ const AlertsTab: React.FC = () => {
       } catch {}
     }
     
-    // Fallback to localhost for development
-    return 'http://localhost:5000';
+    // Fallback to actual IP address for development
+    return 'http://192.168.1.97:5000';
   })();
 
   useEffect(() => {
@@ -442,6 +444,20 @@ const AlertsTab: React.FC = () => {
             </Text>
           </TouchableOpacity>
         </View>
+        
+        {/* Test Notification Button */}
+        <TouchableOpacity 
+          style={styles.testButton} 
+          onPress={() => {
+            console.log('🧪 Testing notification...');
+            sendFallNotification();
+          }}
+        >
+          <Icon name="notifications" size={20} color="#fff" />
+          <Text style={styles.testButtonText}>
+            Test Notification {expoPushToken ? '(Token: ✓)' : '(No Token)'}
+          </Text>
+        </TouchableOpacity>
       </View>
 
       {error ? (
@@ -712,6 +728,21 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '500',
     textTransform: 'capitalize',
+  },
+  testButton: {
+    backgroundColor: '#ff6b6b',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 12,
+    borderRadius: 8,
+    marginTop: 12,
+  },
+  testButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
+    marginLeft: 8,
   },
 });
 
