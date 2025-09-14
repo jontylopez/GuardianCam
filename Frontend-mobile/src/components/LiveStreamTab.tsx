@@ -29,6 +29,7 @@ const LiveStreamTab: React.FC = () => {
   const [progress, setProgress] = useState(0);
   const [embedHtml, setEmbedHtml] = useState('');
   const [reloadKey, setReloadKey] = useState(0);
+  const [livekitError, setLivekitError] = useState(false);
 
   const apiBase = useMemo(() => {
     // @ts-ignore
@@ -54,10 +55,23 @@ const LiveStreamTab: React.FC = () => {
   // AUTO DETECT FALLBACK
   // ----------------------
   useEffect(() => {
-    // Prefer native LiveKit RN viewer
+    // Start with native LiveKit RN viewer, but allow fallback to web
     setMode('native');
     setIsLoading(false);
   }, []);
+
+  const handleLivekitError = () => {
+    console.log('🔄 LiveKit error detected, switching to web mode');
+    setLivekitError(true);
+    setMode('web');
+  };
+
+  const handleRetryLivekit = () => {
+    console.log('🔄 Retrying LiveKit connection');
+    setLivekitError(false);
+    setMode('native');
+    setHasError(false);
+  };
 
   // Fetch LiveKit token and build minimal inline viewer HTML
   // Skip inline embed; rely on the working web viewer URL for maximum compatibility in WebView
@@ -108,7 +122,7 @@ const LiveStreamTab: React.FC = () => {
             </View>
           ) : (
             mode === 'native' ? (
-              <LiveKitRNViewer />
+              <LiveKitRNViewer onError={handleLivekitError} />
             ) : (
               <WebView
                 ref={webRef}
@@ -142,7 +156,22 @@ const LiveStreamTab: React.FC = () => {
           )}
 
           <View style={styles.buttonRow}>
-            <Button mode="contained" onPress={handleOpenExternal} buttonColor="#667eea" textColor="#fff" style={{ flex: 1 }}>
+            {livekitError && (
+              <Button 
+                mode="outlined" 
+                onPress={handleRetryLivekit}
+                style={styles.retryButton}
+              >
+                🔄 Retry LiveKit
+              </Button>
+            )}
+            <Button 
+              mode="outlined" 
+              onPress={() => setMode(mode === 'native' ? 'web' : 'native')}
+              style={styles.switchButton}
+            >
+              {mode === 'native' ? '🌐 Switch to Web' : '📱 Switch to Native'}
+            </Button><Button mode="contained" onPress={handleOpenExternal} buttonColor="#667eea" textColor="#fff" style={{ flex: 1 }}>
               Open LiveKit in Browser
             </Button>
           </View>
@@ -168,7 +197,9 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.05)',
   },
   loadingText: { marginTop: 10, color: '#6366f1', fontWeight: '600' },
-  buttonRow: { flexDirection: 'row', justifyContent: 'space-around', padding: 8 },
+  buttonRow: { flexDirection: 'row', justifyContent: 'space-around', padding: 8, flexWrap: 'wrap' },
+  retryButton: { marginHorizontal: 4, marginVertical: 4 },
+  switchButton: { marginHorizontal: 4, marginVertical: 4 },
   errorContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 16 },
   errorTitle: { fontSize: 16, fontWeight: 'bold', marginBottom: 6, color: '#1f2937' },
   errorSubtitle: { fontSize: 13, color: '#6b7280', textAlign: 'center', marginBottom: 8 },

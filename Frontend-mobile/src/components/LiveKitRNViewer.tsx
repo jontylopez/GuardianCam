@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { View, StyleSheet, Dimensions, Platform } from 'react-native';
+import { View, StyleSheet, Dimensions, Platform, Text, TouchableOpacity } from 'react-native';
 import axios from 'axios';
 import { LiveKitRoom, VideoTrack, registerGlobals, useTracks } from '@livekit/react-native';
 import { Track } from 'livekit-client';
@@ -10,6 +10,7 @@ type Props = {
   apiBaseUrl?: string;
   roomName?: string;
   role?: 'viewer' | 'broadcaster';
+  onError?: () => void;
 };
 
 const ROOM_NAME_DEFAULT = 'guardian-room-1';
@@ -17,10 +18,14 @@ const ROOM_NAME_DEFAULT = 'guardian-room-1';
 const LiveKitRNViewer: React.FC<Props> = ({ 
   apiBaseUrl, 
   roomName, 
-  role = 'viewer' 
+  role = 'viewer',
+  onError
 }: Props) => {
   const [token, setToken] = useState<string | undefined>(undefined);
   const [serverUrl, setServerUrl] = useState<string | undefined>(undefined);
+  const [connectionState, setConnectionState] = useState<'disconnected' | 'connecting' | 'connected' | 'error'>('disconnected');
+  const [error, setError] = useState<string | null>(null);
+  const [retryCount, setRetryCount] = useState(0);
 
   const resolvedApiBase = useMemo(() => {
     // @ts-ignore
@@ -53,36 +58,126 @@ const LiveKitRNViewer: React.FC<Props> = ({
     let cancelled = false;
     const fetchToken = async () => {
       try {
+        setConnectionState('connecting');
+        setError(null);
+        console.log('🔗 Fetching LiveKit token...', { apiBase: resolvedApiBase, room, identity, role });
+        
         const { data } = await axios.get(`${resolvedApiBase}/api/livekit/token`, {
           params: { room, identity, role },
+          timeout: 10000, // 10 second timeout
         });
-        if (!data?.token || !data?.url) throw new Error('Missing LiveKit token/url');
+        
+        if (!data?.token || !data?.url) {
+          throw new Error('Missing LiveKit token/url in response');
+        }
+        
         if (cancelled) return;
+        
+        console.log('✅ LiveKit token received:', { 
+          hasToken: !!data.token, 
+          url: data.url, 
+          room: data.room,
+          identity: data.identity 
+        });
+        
         setToken(data.token);
         setServerUrl(data.url);
-      } catch (e) {
-        // eslint-disable-next-line no-console
-        console.error('LiveKit token error:', e);
+        setConnectionState('connected');
+        setRetryCount(0); // Reset retry count on success
+      } catch (e: any) {
+        console.error('❌ LiveKit token error:', e);
+        if (cancelled) return;
+        
+        const errorMessage = e.response?.data?.error || e.message || 'Failed to get LiveKit token';
+        setError(errorMessage);
+        setConnectionState('error');
+        
+        // Auto-retry logic (max 3 retries)
+        if (retryCount < 3) {
+          console.log(`🔄 Retrying LiveKit connection in 3 seconds... (${retryCount + 1}/3)`);
+          setTimeout(() => {
+            if (!cancelled) {
+              setRetryCount(prev => prev + 1);
+            }
+          }, 3000);
+        }
       }
     };
+    
     fetchToken();
     return () => { cancelled = true; };
-  }, [resolvedApiBase, room, identity, role]);
+  }, [resolvedApiBase, room, identity, role, retryCount]);
+
+  const handleConnected = () => {
+    console.log('✅ LiveKit connected successfully');
+    setConnectionState('connected');
+    setError(null);
+  };
+
+  const handleDisconnected = () => {
+    console.log('🔌 LiveKit disconnected');
+    setConnectionState('disconnected');
+  };
+
+  const handleError = (err: any) => {
+    console.error('❌ LiveKit connection error:', err);
+    setConnectionState('error');
+    setError(err?.message || 'LiveKit connection failed');
+    
+    // Call parent error handler if provided
+    if (onError) {
+      onError();
+    }
+  };
+
+  const handleRetry = () => {
+    console.log('🔄 Manual retry requested');
+    setRetryCount(0);
+    setError(null);
+    setConnectionState('disconnected');
+  };
 
   return (
     <View style={styles.container}>
-      <LiveKitRoom
-        serverUrl={serverUrl}
-        token={token}
-        connect={!!(serverUrl && token)}
-        audio={false}
-        video={false}
-        onConnected={() => {}}
-        onDisconnected={() => {}}
-        onError={(err) => console.warn('LiveKit error', err)}
-      >
-        <AutoGridVideos />
-      </LiveKitRoom>
+      {/* Connection Status Display */}
+      <View style={styles.statusContainer}>
+        <Text style={styles.statusText}>
+          Status: {connectionState === 'connecting' ? '🔄 Connecting...' : 
+                  connectionState === 'connected' ? '✅ Connected' : 
+                  connectionState === 'error' ? '❌ Error' : '🔌 Disconnected'}
+        </Text>
+        {error && (
+          <Text style={styles.errorText}>
+            Error: {error}
+          </Text>
+        )}
+        {connectionState === 'error' && retryCount < 3 && (
+          <Text style={styles.retryText}>
+            Auto-retrying in 3 seconds... ({retryCount + 1}/3)
+          </Text>
+        )}
+        {connectionState === 'error' && retryCount >= 3 && (
+          <TouchableOpacity style={styles.retryButton} onPress={handleRetry}>
+            <Text style={styles.retryButtonText}>🔄 Retry Connection</Text>
+          </TouchableOpacity>
+        )}
+      </View>
+
+      {/* LiveKit Room */}
+      {serverUrl && token && (
+        <LiveKitRoom
+          serverUrl={serverUrl}
+          token={token}
+          connect={connectionState !== 'error'}
+          audio={false}
+          video={false}
+          onConnected={handleConnected}
+          onDisconnected={handleDisconnected}
+          onError={handleError}
+        >
+          <AutoGridVideos />
+        </LiveKitRoom>
+      )}
     </View>
   );
 };
@@ -109,6 +204,41 @@ const height = (width * 9) / 16;
 const styles = StyleSheet.create({
   // Do not use flex:1 here so the viewer doesn't push action buttons off-screen
   container: { backgroundColor: '#000', alignSelf: 'stretch' },
+  statusContainer: {
+    padding: 12,
+    backgroundColor: '#1a1a1a',
+    borderBottomWidth: 1,
+    borderBottomColor: '#333',
+  },
+  statusText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '600',
+    marginBottom: 4,
+  },
+  errorText: {
+    color: '#ff6b6b',
+    fontSize: 12,
+    marginBottom: 4,
+  },
+  retryText: {
+    color: '#ffa500',
+    fontSize: 12,
+    fontStyle: 'italic',
+  },
+  retryButton: {
+    backgroundColor: '#667eea',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 4,
+    marginTop: 4,
+    alignSelf: 'flex-start',
+  },
+  retryButtonText: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: '600',
+  },
   grid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center' },
   video: { width, height, backgroundColor: '#000' },
 });

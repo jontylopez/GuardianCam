@@ -11,7 +11,6 @@ import {
 } from 'react-native';
 import { Alert } from 'react-native';
 import { useAuth } from '../contexts/AuthContext';
-import { useNotification } from '../contexts/NotificationContext';
 import axios from 'axios';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 
@@ -29,7 +28,6 @@ interface AlertItem {
 
 const AlertsTab: React.FC = () => {
   const { user, token } = useAuth();
-  const { sendFallNotification, expoPushToken } = useNotification();
   const [alerts, setAlerts] = useState<AlertItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -445,17 +443,17 @@ const AlertsTab: React.FC = () => {
           </TouchableOpacity>
         </View>
         
-        {/* Test Notification Button */}
+        {/* Refresh Button */}
         <TouchableOpacity 
-          style={styles.testButton} 
+          style={styles.refreshButton} 
           onPress={() => {
-            console.log('🧪 Testing notification...');
-            sendFallNotification();
+            console.log('🔄 Refreshing alerts...');
+            loadAlerts();
           }}
         >
-          <Icon name="notifications" size={20} color="#fff" />
-          <Text style={styles.testButtonText}>
-            Test Notification {expoPushToken ? '(Token: ✓)' : '(No Token)'}
+          <Icon name="refresh" size={20} color="#fff" />
+          <Text style={styles.refreshButtonText}>
+            Refresh Alerts
           </Text>
         </TouchableOpacity>
       </View>
@@ -575,15 +573,15 @@ const styles = StyleSheet.create({
     fontSize: 12,
     marginBottom: 2,
   },
-  testButton: {
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+  refreshButton: {
+    backgroundColor: 'rgba(102, 126, 234, 0.8)',
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 4,
     marginTop: 8,
     alignSelf: 'flex-start',
   },
-  testButtonText: {
+  refreshButtonText: {
     color: 'white',
     fontSize: 12,
     fontWeight: '500',
@@ -729,8 +727,8 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     textTransform: 'capitalize',
   },
-  testButton: {
-    backgroundColor: '#ff6b6b',
+  refreshButton: {
+    backgroundColor: '#667eea',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
@@ -738,7 +736,7 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     marginTop: 12,
   },
-  testButtonText: {
+  refreshButtonText: {
     color: '#fff',
     fontSize: 16,
     fontWeight: '600',
