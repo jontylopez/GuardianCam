@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
 import { toast } from 'react-toastify';
 import { FaPaperPlane } from 'react-icons/fa';
@@ -9,18 +9,13 @@ import './PushTest.css';
 const DEFAULT_MESSAGE = 'Hello From Web';
 
 const PushTest = () => {
-  const { user, token: authToken } = useAuth();
+  const { token: authToken } = useAuth();
   const [token, setToken] = useState('');
   const [title, setTitle] = useState('GuardianCam Alert');
   const [body, setBody] = useState(DEFAULT_MESSAGE);
   const [loading, setLoading] = useState(false);
 
-  // Load saved token when component mounts
-  useEffect(() => {
-    loadSavedToken();
-  }, []);
-
-  const loadSavedToken = async () => {
+  const loadSavedToken = useCallback(async () => {
     try {
       const res = await fetch('/api/push/token', {
         headers: {
@@ -38,7 +33,12 @@ const PushTest = () => {
     } catch (error) {
       console.error('Failed to load saved token:', error);
     }
-  };
+  }, [authToken]);
+
+  // Load saved token when component mounts
+  useEffect(() => {
+    loadSavedToken();
+  }, [loadSavedToken]);
 
   const sendNotification = async () => {
     if (!token.trim()) {

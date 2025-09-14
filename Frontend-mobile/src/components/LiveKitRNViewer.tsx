@@ -14,7 +14,11 @@ type Props = {
 
 const ROOM_NAME_DEFAULT = 'guardian-room-1';
 
-const LiveKitRNViewer: React.FC<Props> = ({ apiBaseUrl, roomName, role = 'viewer' }) => {
+const LiveKitRNViewer: React.FC<Props> = ({ 
+  apiBaseUrl, 
+  roomName, 
+  role = 'viewer' 
+}: Props) => {
   const [token, setToken] = useState<string | undefined>(undefined);
   const [serverUrl, setServerUrl] = useState<string | undefined>(undefined);
 

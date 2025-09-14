@@ -6,7 +6,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import './AlertsCard.css';
 
 const AlertsCard = () => {
-  const { user, token: authToken } = useAuth();
+  const { token: authToken } = useAuth();
   const [alerts, setAlerts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showAlerts, setShowAlerts] = useState(false);

@@ -44,7 +44,13 @@ const LiveKitBroadcaster = () => {
       console.error('Reconnection failed:', error);
       setLastError(error.message || 'Reconnection failed');
       if (reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
-        handleDisconnection();
+        setReconnectAttempts(prev => prev + 1);
+        setStatus('reconnecting');
+        
+        // Attempt reconnection after delay
+        reconnectTimeoutRef.current = setTimeout(() => {
+          attemptReconnection();
+        }, RECONNECT_DELAY * (reconnectAttempts + 1));
       } else {
         setStatus('failed');
       }

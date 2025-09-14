@@ -124,7 +124,7 @@ export const AuthProvider = ({ children }) => {
         password,
       });
 
-      const { token: newToken, user: userData } = response.data;
+      const { token: newToken } = response.data;
 
       // Validate the new token immediately
       const validatedUser = await validateToken(newToken);
@@ -142,7 +142,6 @@ export const AuthProvider = ({ children }) => {
       let message = "Login failed. Invalid email or password.";
       
       if (error.response?.data) {
-        const errorData = error.response.data;
         // Use a generic message for all login errors
         message = "Login failed. Invalid email or password.";
       } else if (error?.request && !error?.response) {
@@ -160,7 +159,7 @@ export const AuthProvider = ({ children }) => {
       setAuthError(null);
       const response = await axios.post(`/api/auth/register`, userData);
 
-      const { token: newToken, user: newUser } = response.data;
+      const { token: newToken } = response.data;
 
       // Validate the new token immediately
       const validatedUser = await validateToken(newToken);
@@ -187,6 +186,9 @@ export const AuthProvider = ({ children }) => {
         switch (errorCode) {
           case "USER_ALREADY_EXISTS":
             message = "An account with this email already exists. Please try logging in instead.";
+            break;
+          default:
+            // Use the message from errorData or fallback
             break;
         }
         
